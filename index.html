@@ -244,6 +244,39 @@ table.tk tr.task-row:hover{background:#FAFCFD;}
 .gantt-today-line{position:absolute; top:0; bottom:0; width:2px; background:var(--coral); z-index:5;}
 .gantt-today-label{position:absolute; top:-1px; left:5px; font-size:10px; color:var(--coral); font-weight:700; background:var(--panel); padding:1px 4px; border-radius:4px; z-index:6; white-space:nowrap;}
 
+/* ---------- Gantt bar v2: progress fill + overrun + date flanks ---------- */
+.gantt-bar-outer{position:absolute; top:8px; height:26px; border-radius:6px; overflow:hidden; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.12); background:var(--slate-soft); z-index:2;}
+.gantt-bar-outer.is-group{top:6px; height:30px; border:2px solid var(--gcolor, var(--navy)); box-shadow:none;}
+.gantt-bar-fill{position:absolute; top:0; left:0; bottom:0;}
+.gantt-bar-label{position:absolute; top:0; bottom:0; display:flex; align-items:center; font-size:11px; font-weight:700; white-space:nowrap; padding:0 6px; z-index:3; pointer-events:none;}
+.gantt-overrun{position:absolute; top:8px; height:26px; border-radius:0 6px 6px 0; display:flex; align-items:center; justify-content:center; font-size:9.5px; font-weight:700; color:#fff; cursor:pointer; z-index:2;
+  background:repeating-linear-gradient(45deg, var(--coral) 0 6px, #B8412E 6px 12px); box-shadow:0 1px 2px rgba(0,0,0,.12);}
+.gantt-overrun.is-group{top:6px; height:30px;}
+.gantt-date-flank{position:absolute; top:0; height:42px; display:flex; align-items:center; font-size:10px; color:var(--ink-faint); font-family:'IBM Plex Mono'; white-space:nowrap; pointer-events:none; z-index:1;}
+.gantt-date-flank.is-group{height:30px;}
+.gantt-date-flank.flank-start{left:0; justify-content:flex-end; padding-right:6px;}
+.gantt-date-flank.flank-end{justify-content:flex-start; padding-left:6px;}
+.gantt-date-flank.flank-overdue{color:var(--coral); font-weight:700;}
+.legend-dot.striped{background:repeating-linear-gradient(45deg, var(--coral) 0 4px, #B8412E 4px 8px);}
+
+/* ---------- Gantt group rows (collapsible) ---------- */
+.gantt-group-row{cursor:pointer; gap:8px;}
+.ggr-chevron{display:inline-block; width:12px; flex-shrink:0; transition:transform .15s ease; font-size:10px;}
+.ggr-chevron.collapsed{transform:rotate(-90deg);}
+.ggr-dot{width:8px; height:8px; border-radius:50%; flex-shrink:0;}
+.ggr-name{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.ggr-pct{font-family:'IBM Plex Mono'; font-size:11px; font-weight:700; flex-shrink:0;}
+
+/* ---------- Gantt toolbar ---------- */
+.gantt-toolbar{display:flex; flex-direction:column; gap:10px; margin-bottom:14px;}
+.gantt-toolbar-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+.gtb-label{font-size:11.5px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.05em; display:flex; align-items:center; gap:5px;}
+.zoom-toggle{display:flex; gap:3px; background:var(--slate-soft); padding:3px; border-radius:9px;}
+.zoom-btn{border:none; background:transparent; padding:6px 13px; font-size:12.5px; font-weight:600; color:var(--ink-soft); border-radius:7px; cursor:pointer; font-family:'IBM Plex Sans';}
+.zoom-btn.active{background:var(--panel); color:var(--navy); box-shadow:0 1px 3px rgba(14,39,56,0.12);}
+.range-badge{font-family:'IBM Plex Mono'; font-size:12.5px; color:var(--ink-soft); margin-left:auto;}
+.gantt-toolbar-row input[type=date]{padding:7px 9px; border:1px solid var(--line); border-radius:8px; font-size:12.5px; font-family:'IBM Plex Sans'; background:var(--panel);}
+
 /* ---------- Workload ---------- */
 .wl-row{display:grid; grid-template-columns:160px 1fr 200px; gap:14px; align-items:center; padding:12px 0; border-bottom:1px solid var(--line-soft);}
 .wl-row:last-child{border-bottom:none;}
@@ -298,6 +331,8 @@ var currentTaskId = null;
 var ganttFilterProject = 'all';
 var ganttRangeStart = null; // 'YYYY-MM-DD' or null = auto-fit
 var ganttRangeEnd = null;
+var ganttZoomMode = 'custom'; // 'month' | 'week' | 'custom'
+var ganttCollapsed = {}; // projectId -> true if collapsed
 var projectFilterCategory = 'all';
 var projectFilterPriority = 'all';
 var projectFilterOwner = '';
@@ -415,6 +450,89 @@ function fmtTimestamp(ts){
   return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + (d.getFullYear()+543) + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
 }
 function isOverdue(t){ return t.dueDate && t.dueDate < todayStr() && Number(t.progress) < 100; }
+function toDateStr(d){ return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+function firstDayOfMonth(d){ return new Date(d.getFullYear(), d.getMonth(), 1); }
+function lastDayOfMonth(d){ return new Date(d.getFullYear(), d.getMonth()+1, 0); }
+function mostRecentMonday(d){ var day = d.getDay(); var diff = day===0 ? 6 : day-1; return addDays(d, -diff); }
+function fmtMonthYearShort(d){
+  var months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var yy = String((d.getFullYear()+543) % 100).padStart(2,'0');
+  return months[d.getMonth()] + ' ' + yy;
+}
+function overdueDaysOf(t){
+  if(!isOverdue(t)) return 0;
+  return dayDiff(parseDateStr(t.dueDate), parseDateStr(todayStr()));
+}
+function projectAggregate(pid){
+  var all = tasksOfProject(pid).filter(function(t){ return t.startDate && t.dueDate; });
+  if(!all.length) return null;
+  var minS = null, maxE = null, sum = 0;
+  all.forEach(function(t){
+    var s = parseDateStr(t.startDate), e = parseDateStr(t.dueDate);
+    if(!minS || s < minS) minS = s;
+    if(!maxE || e > maxE) maxE = e;
+    sum += Number(t.progress);
+  });
+  return { startDate: toDateStr(minS), dueDate: toDateStr(maxE), progress: Math.round(sum/all.length), taskCount: all.length };
+}
+function fillColorFor(progress){
+  if(Number(progress) === 100) return 'var(--teal)';
+  if(Number(progress) === 0) return 'var(--slate)';
+  return 'var(--amber)';
+}
+function buildBarSegments(item, rangeStart, rangeEnd, dayWidth){
+  var ts = parseDateStr(item.startDate), te = parseDateStr(item.dueDate);
+  var today = parseDateStr(todayStr());
+  var overdue = isOverdue(item);
+  var overdueDays = overdue ? dayDiff(te, today) : 0;
+
+  var seg = { hasPlan:false, planLeft:0, planWidthPx:0, hasOverrun:false, overrunLeft:0, overrunWidthPx:0, overdue:overdue, overdueDays:overdueDays, endOfBarPx:0 };
+
+  var planVisStart = ts < rangeStart ? rangeStart : ts;
+  var planVisEnd = te > rangeEnd ? rangeEnd : te;
+  if(te >= rangeStart && ts <= rangeEnd && planVisEnd >= planVisStart){
+    seg.hasPlan = true;
+    seg.planLeft = dayDiff(rangeStart, planVisStart) * dayWidth;
+    var planDays = dayDiff(planVisStart, planVisEnd) + 1;
+    seg.planWidthPx = Math.max(dayWidth-2, planDays * dayWidth - 2);
+    seg.endOfBarPx = seg.planLeft + seg.planWidthPx;
+  }
+
+  if(overdue){
+    var overrunStartReal = addDays(te, 1);
+    var overrunEndReal = today;
+    var ovVisStart = overrunStartReal < rangeStart ? rangeStart : overrunStartReal;
+    var ovVisEnd = overrunEndReal > rangeEnd ? rangeEnd : overrunEndReal;
+    if(overrunEndReal >= rangeStart && overrunStartReal <= rangeEnd && ovVisEnd >= ovVisStart){
+      seg.hasOverrun = true;
+      seg.overrunLeft = dayDiff(rangeStart, ovVisStart) * dayWidth;
+      var ovDays = dayDiff(ovVisStart, ovVisEnd) + 1;
+      seg.overrunWidthPx = ovDays * dayWidth;
+      seg.endOfBarPx = Math.max(seg.endOfBarPx, seg.overrunLeft + seg.overrunWidthPx);
+    }
+  }
+  return seg;
+}
+function renderBarHtml(item, seg, opts){
+  opts = opts || {};
+  var isGroup = !!opts.isGroup;
+  var fillColor = fillColorFor(item.progress);
+  var fillPct = Math.max(0, Math.min(100, Number(item.progress)));
+  var html = '';
+  if(seg.hasPlan){
+    var labelInside = fillPct >= 30;
+    var label = seg.planWidthPx > 44 ? (item.progress + '%') : '';
+    html += '<div class="gantt-bar-outer' + (isGroup?' is-group':'') + '" style="left:' + seg.planLeft + 'px; width:' + seg.planWidthPx + 'px;' + (isGroup?(' --gcolor:'+opts.groupColor+';'):'') + '" data-action="' + (opts.dataAction||'') + '" data-id="' + (opts.dataId||'') + '" title="' + esc(opts.tooltip||'') + '">' +
+      '<div class="gantt-bar-fill" style="width:' + fillPct + '%; background:' + fillColor + ';"></div>' +
+      (label ? '<div class="gantt-bar-label" style="left:' + (labelInside?6:Math.round(seg.planWidthPx*fillPct/100)+6) + 'px; color:' + (labelInside?'#fff':'var(--ink)') + ';">' + label + '</div>' : '') +
+    '</div>';
+  }
+  if(seg.hasOverrun){
+    var ovLabel = seg.overrunWidthPx > 26 ? ('+' + seg.overdueDays) : '';
+    html += '<div class="gantt-overrun' + (isGroup?' is-group':'') + '" style="left:' + seg.overrunLeft + 'px; width:' + seg.overrunWidthPx + 'px;" data-action="' + (opts.dataAction||'') + '" data-id="' + (opts.dataId||'') + '" title="' + esc(opts.tooltip||'') + '">' + ovLabel + '</div>';
+  }
+  return html;
+}
 function statusInfo(t){
   var p = Number(t.progress);
   if(isOverdue(t)) return {label:'เลยกำหนด', cls:'badge-coral', color:'var(--coral)'};
@@ -616,26 +734,7 @@ function renderProjectDetail(){
 
 /* ===================== Gantt (embedded in home page) ===================== */
 function renderGanttSection(){
-  var filterOptions = '<option value="all">ทุกโปรเจกต์</option>' + projects.map(function(p){
-    return '<option value="' + p.id + '"' + (ganttFilterProject===p.id?' selected':'') + '>' + esc(p.name) + '</option>';
-  }).join('');
-  var controlBar = '<div class="filter-bar">' +
-    '<label style="font-size:12.5px; color:var(--ink-soft); font-weight:600;">โปรเจกต์:</label>' +
-    '<select data-action="filter-gantt">' + filterOptions + '</select>' +
-    '<label style="font-size:12.5px; color:var(--ink-soft); font-weight:600; margin-left:8px;">แสดงช่วง:</label>' +
-    '<input type="date" id="gantt-range-start" value="' + (ganttRangeStart||'') + '" style="padding:7px 9px; border:1px solid var(--line); border-radius:8px; font-size:12.5px;">' +
-    '<span style="color:var(--ink-faint); font-size:12.5px;">ถึง</span>' +
-    '<input type="date" id="gantt-range-end" value="' + (ganttRangeEnd||'') + '" style="padding:7px 9px; border:1px solid var(--line); border-radius:8px; font-size:12.5px;">' +
-    '<button class="btn btn-ghost btn-sm" data-action="apply-gantt-range">แสดงช่วงนี้</button>' +
-    '<button class="btn btn-ghost btn-sm" data-action="fit-gantt-range">&#8596; Fit ทั้งหมด</button>' +
-  '</div>';
-
-  var legend = '<div class="gantt-legend">' +
-    '<div class="legend-item"><span class="legend-dot" style="background:var(--slate)"></span>ยังไม่ได้ดำเนินการ</div>' +
-    '<div class="legend-item"><span class="legend-dot" style="background:var(--amber)"></span>กำลังดำเนินการ</div>' +
-    '<div class="legend-item"><span class="legend-dot" style="background:var(--teal)"></span>เสร็จสมบูรณ์</div>' +
-    '<div class="legend-item"><span class="legend-dot" style="background:var(--coral)"></span>เลยกำหนด</div>' +
-  '</div>';
+  var todayD = parseDateStr(todayStr());
 
   var relevantProjects = ganttFilterProject === 'all' ? projects : projects.filter(function(p){ return p.id === ganttFilterProject; });
   var baseTasks = tasks.filter(function(t){
@@ -644,19 +743,11 @@ function renderGanttSection(){
     return t.projectId === ganttFilterProject;
   });
 
-  if(baseTasks.length === 0){
-    return controlBar + '<div class="empty-state">' +
-      '<div class="es-icon">&#128197;</div>' +
-      '<div class="es-title">ยังไม่มีข้อมูลสำหรับแสดงแผนภูมิ</div>' +
-      '<div class="es-sub">เพิ่มงานที่มีวันเริ่มต้นและวันกำหนดส่งในโปรเจกต์ก่อน</div>' +
-    '</div>';
-  }
-
   var rangeStart, rangeEnd;
   if(ganttRangeStart && ganttRangeEnd && ganttRangeStart <= ganttRangeEnd){
     rangeStart = parseDateStr(ganttRangeStart);
     rangeEnd = parseDateStr(ganttRangeEnd);
-  } else {
+  } else if(baseTasks.length){
     var minD = null, maxD = null;
     baseTasks.forEach(function(t){
       var s = parseDateStr(t.startDate), e = parseDateStr(t.dueDate);
@@ -665,28 +756,73 @@ function renderGanttSection(){
     });
     rangeStart = addDays(minD, -2);
     rangeEnd = addDays(maxD, 3);
+  } else {
+    rangeStart = firstDayOfMonth(todayD);
+    rangeEnd = lastDayOfMonth(todayD);
   }
+
+  var rangeBadge = fmtMonthYearShort(rangeStart) + ' &ndash; ' + fmtMonthYearShort(rangeEnd);
+  var filterOptions = '<option value="all">ทุกโปรเจกต์</option>' + projects.map(function(p){
+    return '<option value="' + p.id + '"' + (ganttFilterProject===p.id?' selected':'') + '>' + esc(p.name) + '</option>';
+  }).join('');
+
+  var toolbar = '<div class="gantt-toolbar">' +
+    '<div class="gantt-toolbar-row">' +
+      '<span class="gtb-label">&#10520; TIMELINE</span>' +
+      '<div class="zoom-toggle">' +
+        '<button class="zoom-btn' + (ganttZoomMode==='month'?' active':'') + '" data-action="gantt-zoom-month">รายเดือน</button>' +
+        '<button class="zoom-btn' + (ganttZoomMode==='week'?' active':'') + '" data-action="gantt-zoom-week">รายสัปดาห์</button>' +
+        '<button class="zoom-btn' + (ganttZoomMode==='custom'?' active':'') + '" data-action="gantt-zoom-custom">กำหนดเอง</button>' +
+      '</div>' +
+      '<span class="range-badge">' + rangeBadge + '</span>' +
+    '</div>' +
+    '<div class="gantt-toolbar-row">' +
+      '<label style="font-size:12.5px; color:var(--ink-soft); font-weight:600;">เริ่มต้น</label>' +
+      '<input type="date" id="gantt-range-start" value="' + (ganttRangeStart||'') + '">' +
+      '<span style="color:var(--ink-faint);">&rarr;</span>' +
+      '<label style="font-size:12.5px; color:var(--ink-soft); font-weight:600;">สิ้นสุด</label>' +
+      '<input type="date" id="gantt-range-end" value="' + (ganttRangeEnd||'') + '">' +
+      '<button class="btn btn-ghost btn-sm" data-action="apply-gantt-range">แสดงช่วงนี้</button>' +
+      '<button class="btn btn-ghost btn-sm" data-action="fit-gantt-range">&#10530; Fit</button>' +
+      '<button class="btn btn-ghost btn-sm" data-action="gantt-jump-today">&#128336; วันนี้</button>' +
+      '<label style="font-size:12.5px; color:var(--ink-soft); font-weight:600; margin-left:6px;">โปรเจกต์:</label>' +
+      '<select data-action="filter-gantt">' + filterOptions + '</select>' +
+    '</div>' +
+  '</div>';
+
+  var legend = '<div class="gantt-legend">' +
+    '<div class="legend-item"><span class="legend-dot" style="background:var(--slate)"></span>ยังไม่ได้เริ่ม</div>' +
+    '<div class="legend-item"><span class="legend-dot" style="background:var(--amber)"></span>กำลังดำเนินการ</div>' +
+    '<div class="legend-item"><span class="legend-dot" style="background:var(--teal)"></span>เสร็จ</div>' +
+    '<div class="legend-item"><span class="legend-dot striped"></span>เกินกำหนด</div>' +
+  '</div>';
+
+  if(baseTasks.length === 0){
+    return toolbar + '<div class="empty-state">' +
+      '<div class="es-icon">&#128197;</div>' +
+      '<div class="es-title">ยังไม่มีข้อมูลสำหรับแสดงแผนภูมิ</div>' +
+      '<div class="es-sub">เพิ่มงานที่มีวันเริ่มต้นและวันกำหนดส่งในโปรเจกต์ก่อน</div>' +
+    '</div>';
+  }
+
   var totalDays = Math.max(1, dayDiff(rangeStart, rangeEnd) + 1);
   var dayWidth = 24;
   var timelineWidth = totalDays * dayWidth;
 
-  // tasks visible within the selected range (clipped)
   var relevantTasks = baseTasks.filter(function(t){
     var ts = parseDateStr(t.startDate), te = parseDateStr(t.dueDate);
     return te >= rangeStart && ts <= rangeEnd;
   });
 
   if(relevantTasks.length === 0){
-    return controlBar + '<div class="empty-state">' +
+    return toolbar + legend + '<div class="empty-state">' +
       '<div class="es-icon">&#128269;</div>' +
       '<div class="es-title">ไม่มีงานในช่วงเวลาที่เลือก</div>' +
-      '<div class="es-sub">ลองกด "Fit ทั้งหมด" เพื่อแสดงทุกโปรเจกต์</div>' +
+      '<div class="es-sub">ลองกด "Fit" เพื่อแสดงทุกโปรเจกต์</div>' +
     '</div>';
   }
 
-  // build week ticks
-  var ticksHtml = '';
-  var tickLabelsHtml = '';
+  var ticksHtml = '', tickLabelsHtml = '';
   for(var i=0;i<totalDays;i++){
     var d = addDays(rangeStart, i);
     if(i===0 || d.getDay()===1){
@@ -700,8 +836,7 @@ function renderGanttSection(){
     var dj = addDays(rangeStart,j);
     if(dj.getDay()===1) bgTicks += '<div class="gantt-bg-tick" style="left:' + (j*dayWidth) + 'px;"></div>';
   }
-  var today = parseDateStr(todayStr());
-  var todayIdx = dayDiff(rangeStart, today);
+  var todayIdx = dayDiff(rangeStart, todayD);
   var todayLineHtml = '';
   if(todayIdx >= 0 && todayIdx < totalDays){
     var tx = todayIdx*dayWidth;
@@ -711,35 +846,61 @@ function renderGanttSection(){
   var projectsWithTasks = relevantProjects.filter(function(p){
     return relevantTasks.some(function(t){ return t.projectId === p.id; });
   });
+
   var bodyHeight = projectsWithTasks.reduce(function(acc,p){
-    return acc + 30 + relevantTasks.filter(function(t){ return t.projectId === p.id; }).length*42;
+    var collapsed = !!ganttCollapsed[p.id];
+    var n = relevantTasks.filter(function(t){ return t.projectId === p.id; }).length;
+    return acc + 30 + (collapsed ? 0 : n*42);
   },0);
 
-  var labelsHtml = '<div class="gantt-label-head">งาน / ผู้รับผิดชอบ</div>';
+  var labelsHtml = '<div class="gantt-label-head">PROJECT / TASK</div>';
   var rowsHtml = '<div class="gantt-body-rows" style="width:' + timelineWidth + 'px; min-height:' + bodyHeight + 'px;">' + bgTicks + todayLineHtml;
 
   projectsWithTasks.forEach(function(p){
     var pts = sortByStartDate(relevantTasks.filter(function(t){ return t.projectId === p.id; }));
-    labelsHtml += '<div class="gantt-group-row">' + esc(p.name) + '</div>';
-    rowsHtml += '<div class="gantt-group-track"></div>';
-    pts.forEach(function(t){
-      var s = statusInfo(t);
-      var note = latestNote(t);
-      var ts = parseDateStr(t.startDate), te = parseDateStr(t.dueDate);
-      var visStart = ts < rangeStart ? rangeStart : ts;
-      var visEnd = te > rangeEnd ? rangeEnd : te;
-      var startIdx = dayDiff(rangeStart, visStart);
-      var span = dayDiff(visStart, visEnd) + 1;
-      var left = startIdx*dayWidth;
-      var width = Math.max(dayWidth-2, span*dayWidth - 3);
-      var tooltip = esc(t.title) + ' (' + t.progress + '%)' + (note ? ' — ' + esc(truncate(note.text, 60)) : '');
-      labelsHtml += '<div class="gantt-label-row"><div><div class="glr-title">' + esc(t.title) + '</div><div class="glr-sub">' + esc(t.assignee) + '</div></div></div>';
-      rowsHtml += '<div class="gantt-row-track">' +
-        '<div class="gantt-bar" data-action="open-task-detail" data-id="' + t.id + '" style="left:' + left + 'px; width:' + width + 'px; background:' + s.color + ';" title="' + tooltip + '">' +
-          (width > 50 ? (t.progress + '%') : '') +
-        '</div>' +
-      '</div>';
-    });
+    var collapsed = !!ganttCollapsed[p.id];
+    var agg = projectAggregate(p.id);
+
+    labelsHtml += '<div class="gantt-group-row" data-action="toggle-gantt-group" data-id="' + p.id + '">' +
+      '<span class="ggr-chevron' + (collapsed?' collapsed':'') + '">&#9660;</span>' +
+      '<span class="ggr-dot" style="background:' + p.color + '"></span>' +
+      '<span class="ggr-name" title="' + esc(p.name) + '">' + esc(p.name) + '</span>' +
+      (agg ? '<span class="ggr-pct">' + agg.progress + '%</span>' : '') +
+    '</div>';
+
+    var groupTrackInner = '';
+    if(agg){
+      var gseg = buildBarSegments(agg, rangeStart, rangeEnd, dayWidth);
+      groupTrackInner = renderBarHtml(agg, gseg, { isGroup:true, groupColor:p.color, dataAction:'toggle-gantt-group', dataId:p.id,
+        tooltip: p.name + ' — รวม ' + agg.taskCount + ' งาน (' + agg.progress + '%)' });
+      if(gseg.hasPlan || gseg.hasOverrun){
+        var gStartLeft = 0, gStartWidth = gseg.hasPlan ? gseg.planLeft : gseg.overrunLeft;
+        groupTrackInner += '<div class="gantt-date-flank is-group flank-start" style="left:0px; width:' + gStartWidth + 'px;">' + fmtDateShort(parseDateStr(agg.startDate)) + '</div>';
+        var gEndLeft = gseg.endOfBarPx;
+        groupTrackInner += '<div class="gantt-date-flank is-group flank-end' + (gseg.overdue?' flank-overdue':'') + '" style="left:' + gEndLeft + 'px; width:' + (timelineWidth-gEndLeft) + 'px;">' +
+          fmtDateShort(parseDateStr(agg.dueDate)) + (gseg.overdue ? ' (เกิน ' + gseg.overdueDays + ' วัน)' : '') + '</div>';
+      }
+    }
+    rowsHtml += '<div class="gantt-group-track" data-action="toggle-gantt-group" data-id="' + p.id + '">' + groupTrackInner + '</div>';
+
+    if(!collapsed){
+      pts.forEach(function(t){
+        var note = latestNote(t);
+        var seg = buildBarSegments(t, rangeStart, rangeEnd, dayWidth);
+        var tooltip = t.title + ' (' + t.progress + '%)' + (note ? ' — ' + truncate(note.text, 60) : '');
+        labelsHtml += '<div class="gantt-label-row"><div><div class="glr-title">' + esc(t.title) + '</div><div class="glr-sub">' + esc(t.assignee) + '</div></div></div>';
+
+        var trackInner = renderBarHtml(t, seg, { dataAction:'open-task-detail', dataId:t.id, tooltip:tooltip });
+        if(seg.hasPlan || seg.hasOverrun){
+          var startLeftWidth = seg.hasPlan ? seg.planLeft : seg.overrunLeft;
+          trackInner += '<div class="gantt-date-flank flank-start" style="left:0px; width:' + startLeftWidth + 'px;">' + fmtDateShort(parseDateStr(t.startDate)) + '</div>';
+          var endLeft = seg.endOfBarPx;
+          trackInner += '<div class="gantt-date-flank flank-end' + (seg.overdue?' flank-overdue':'') + '" style="left:' + endLeft + 'px; width:' + (timelineWidth-endLeft) + 'px;">' +
+            fmtDateShort(parseDateStr(t.dueDate)) + (seg.overdue ? ' (เกิน ' + seg.overdueDays + ' วัน)' : '') + '</div>';
+        }
+        rowsHtml += '<div class="gantt-row-track">' + trackInner + '</div>';
+      });
+    }
   });
   rowsHtml += '</div>';
 
@@ -751,7 +912,7 @@ function renderGanttSection(){
     '</div></div>' +
   '</div>';
 
-  return controlBar + legend + gantt;
+  return toolbar + legend + gantt;
 }
 
 /* ===================== Overview & Workload ===================== */
@@ -1125,12 +1286,43 @@ document.addEventListener('click', function(e){
     case 'apply-gantt-range':
       var gs = document.getElementById('gantt-range-start').value;
       var ge = document.getElementById('gantt-range-end').value;
-      if(gs && ge && gs <= ge){ ganttRangeStart = gs; ganttRangeEnd = ge; }
+      if(gs && ge && gs <= ge){ ganttRangeStart = gs; ganttRangeEnd = ge; ganttZoomMode = 'custom'; }
       render();
       break;
     case 'fit-gantt-range':
       ganttRangeStart = null;
       ganttRangeEnd = null;
+      ganttZoomMode = 'custom';
+      render();
+      break;
+    case 'gantt-zoom-month':
+      var nowM = new Date();
+      ganttRangeStart = toDateStr(firstDayOfMonth(nowM));
+      ganttRangeEnd = toDateStr(lastDayOfMonth(nowM));
+      ganttZoomMode = 'month';
+      render();
+      break;
+    case 'gantt-zoom-week':
+      var nowW = new Date();
+      var monday = mostRecentMonday(nowW);
+      ganttRangeStart = toDateStr(monday);
+      ganttRangeEnd = toDateStr(addDays(monday, 6));
+      ganttZoomMode = 'week';
+      render();
+      break;
+    case 'gantt-zoom-custom':
+      ganttZoomMode = 'custom';
+      render();
+      break;
+    case 'gantt-jump-today':
+      var nowT = new Date();
+      ganttRangeStart = toDateStr(addDays(nowT, -7));
+      ganttRangeEnd = toDateStr(addDays(nowT, 30));
+      ganttZoomMode = 'custom';
+      render();
+      break;
+    case 'toggle-gantt-group':
+      ganttCollapsed[id] = !ganttCollapsed[id];
       render();
       break;
     case 'close-modal':
