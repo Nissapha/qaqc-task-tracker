@@ -164,6 +164,7 @@ table.tk tr.task-row:hover{background:#FAFCFD;}
 .badge-amber{background:var(--amber-soft); color:#A85F22;}
 .badge-teal{background:var(--teal-soft); color:#1D7468;}
 .badge-coral{background:var(--coral-soft); color:#B8412E;}
+.badge-cat{background:var(--navy-soft); color:var(--navy);}
 .badge::before{content:''; width:6px; height:6px; border-radius:50%; background:currentColor;}
 
 .progress-track{width:90px; height:7px; background:var(--slate-soft); border-radius:5px; overflow:hidden;}
@@ -295,11 +296,38 @@ var currentView = 'projects';
 var currentProjectId = null;
 var currentTaskId = null;
 var ganttFilterProject = 'all';
+var ganttRangeStart = null; // 'YYYY-MM-DD' or null = auto-fit
+var ganttRangeEnd = null;
+var projectFilterCategory = 'all';
+var projectFilterPriority = 'all';
+var projectFilterOwner = '';
 var dataReady = false;
 var firebaseError = null;
 var projectsLoaded = false, tasksLoaded = false;
 
 var PROJECT_COLORS = ['#163A53','#2A9D8F','#E8954B','#D9614F','#6A6FA8','#3D8FA3'];
+
+var CATEGORY_GROUPS = [
+  {id:'incoming', label:'ตรวจสอบคุณภาพวัตถุดิบ', sub:'Incoming Inspection', desc:'ตรวจสอบคุณภาพวัตถุดิบและส่วนประกอบก่อนเข้าสู่กระบวนการผลิต'},
+  {id:'inprocess', label:'ควบคุมคุณภาพในกระบวนการผลิต', sub:'In-Process QC', desc:'ตรวจสอบและควบคุมคุณภาพระหว่างขั้นตอนการผลิต'},
+  {id:'final', label:'ตรวจสอบคุณภาพผลิตภัณฑ์สำเร็จ', sub:'Final Inspection', desc:'ตรวจสอบคุณภาพสินค้าสำเร็จก่อนส่งมอบลูกค้า'},
+  {id:'complaint', label:'ข้อร้องเรียนลูกค้า & NCR', sub:'Complaint / NCR', desc:'ติดตามและแก้ไขปัญหาคุณภาพจากลูกค้า หรือสินค้าที่ไม่เป็นไปตามข้อกำหนด'},
+  {id:'qms', label:'ระบบบริหารคุณภาพ & มาตรฐาน', sub:'QMS / Standards', desc:'งานด้านระบบบริหารคุณภาพ เอกสาร และมาตรฐาน เช่น ISO'},
+  {id:'other', label:'อื่นๆ', sub:'Other', desc:'ระบุรายละเอียดกลุ่มงานเอง'}
+];
+var PRIORITY_LEVELS = [
+  {id:'high', label:'สูง', cls:'badge-coral'},
+  {id:'medium', label:'ปานกลาง', cls:'badge-amber'},
+  {id:'low', label:'ต่ำ', cls:'badge-slate'}
+];
+function categoryById(id){ return CATEGORY_GROUPS.find(function(c){ return c.id === id; }) || null; }
+function priorityById(id){ return PRIORITY_LEVELS.find(function(p){ return p.id === id; }) || PRIORITY_LEVELS[1]; }
+function projectCategoryLabel(p){
+  if(!p.category) return null;
+  if(p.category === 'other') return p.categoryOther ? p.categoryOther : 'อื่นๆ';
+  var c = categoryById(p.category);
+  return c ? c.label : null;
+}
 
 /* ===================== Storage (Firebase Realtime Database) ===================== */
 function notesToObj(notesArr){
@@ -398,6 +426,14 @@ function projectById(id){ return projects.find(function(p){ return p.id === id; 
 function taskById(id){ return tasks.find(function(t){ return t.id === id; }); }
 function tasksOfProject(pid){ return tasks.filter(function(t){ return t.projectId === pid; }); }
 function nextColor(){ return PROJECT_COLORS[projects.length % PROJECT_COLORS.length]; }
+function truncate(s, n){ s = String(s||''); return s.length > n ? s.slice(0, n-1) + '…' : s; }
+function latestNote(t){
+  if(!t.notes || !t.notes.length) return null;
+  return t.notes.slice().sort(function(a,b){ return b.date - a.date; })[0];
+}
+function sortByStartDate(list){
+  return list.slice().sort(function(a,b){ return (a.startDate||'9999').localeCompare(b.startDate||'9999'); });
+}
 
 /* ===================== Render root ===================== */
 function render(){
@@ -422,13 +458,12 @@ function renderTopbar(){
   return '' +
   '<div class="topbar"><div class="topbar-inner">' +
     '<div class="brand">' +
-      '<div class="brand-eyebrow">THERMEDEZ &middot; QUALITY ASSURANCE</div>' +
+      '<div class="brand-eyebrow">THERMEDEZ &middot; QUALITY DIVISION</div>' +
       '<div class="brand-title">QA/QC Task Tracker</div>' +
       '<div class="brand-sub">ระบบติดตามงานภายในทีม QA/QC</div>' +
     '</div>' +
     '<div class="tabs">' +
-      tab('projects','โปรเจกต์') +
-      tab('gantt','แผนภูมิแกนต์') +
+      tab('projects','หน้าแรก') +
       tab('overview','ภาพรวม &amp; ภาระงาน') +
     '</div>' +
   '</div></div>';
@@ -437,20 +472,24 @@ function renderContent(){
   if(currentView === 'projects'){
     return currentProjectId ? renderProjectDetail() : renderProjectsList();
   }
-  if(currentView === 'gantt') return renderGanttView();
   if(currentView === 'overview') return renderOverviewView();
   return '';
 }
 
-/* ===================== Projects list ===================== */
+/* ===================== Projects list (Home) ===================== */
 function renderProjectsList(){
   var head = '<div class="page-head">' +
-      '<div><div class="page-title">โปรเจกต์ทั้งหมด</div><div class="page-desc">จัดกลุ่มงานตรวจสอบคุณภาพตามโปรเจกต์ / ลูกค้า / รุ่นสินค้า</div></div>' +
+      '<div><div class="page-title">หน้าแรก</div><div class="page-desc">ภาพรวมระยะเวลาโครงการ และโปรเจกต์ตรวจสอบคุณภาพทั้งหมด</div></div>' +
       '<button class="btn btn-primary" data-action="open-project-modal">+ เพิ่มโปรเจกต์ใหม่</button>' +
     '</div>';
 
+  var ganttPanel = '<div class="panel" style="padding:16px 18px; margin-bottom:22px;">' +
+    '<div class="section-label" style="margin-top:0; font-size:14px;">แผนภูมิแกนต์ — ภาพรวมระยะเวลาโครงการ</div>' +
+    renderGanttSection() +
+  '</div>';
+
   if(projects.length === 0){
-    return head + '<div class="empty-state">' +
+    return head + ganttPanel + '<div class="empty-state">' +
       '<div class="es-icon">&#128203;</div>' +
       '<div class="es-title">ยังไม่มีโปรเจกต์</div>' +
       '<div class="es-sub">สร้างโปรเจกต์แรกเพื่อเริ่มติดตามงาน QA/QC เช่น ชื่อรุ่นสินค้า หรือชื่อลูกค้า</div>' +
@@ -458,46 +497,91 @@ function renderProjectsList(){
     '</div>';
   }
 
-  var cards = projects.map(function(p){
-    var pt = tasksOfProject(p.id);
-    var total = pt.length;
-    var done = pt.filter(function(t){ return Number(t.progress) === 100; }).length;
-    var overdue = pt.filter(isOverdue).length;
-    var pct = total ? Math.round(pt.reduce(function(s,t){ return s + Number(t.progress); },0) / total) : 0;
-    var scolor = pct === 100 ? 'var(--teal)' : (pct === 0 ? 'var(--slate)' : 'var(--amber)');
-    return '<div class="panel project-card" style="--pcolor:' + p.color + '" data-action="open-project" data-id="' + p.id + '">' +
-      '<div class="project-card-top">' +
-        '<div style="display:flex; gap:8px;"><span class="project-tag" style="--pcolor:' + p.color + '"></span>' +
-          '<div><div class="project-name">' + esc(p.name) + '</div>' +
-          (p.description ? '<div class="project-desc">' + esc(p.description) + '</div>' : '') + '</div>' +
-        '</div>' +
-        '<div class="stamp-wrap"><div class="stamp" style="--spct:' + pct + '; --scolor:' + scolor + '"><span>' + pct + '%</span></div></div>' +
-      '</div>' +
-      '<div class="project-card-bottom">' +
-        '<div class="project-stats">' +
-          '<div>งานทั้งหมด <b>' + total + '</b> &middot; เสร็จแล้ว <b>' + done + '</b>' + (overdue ? ' &middot; <span style="color:var(--coral); font-weight:700;">เลยกำหนด ' + overdue + '</span>' : '') + '</div>' +
-        '</div>' +
-        '<div class="card-actions">' +
-          '<button class="btn btn-ghost btn-sm" data-action="edit-project" data-id="' + p.id + '">แก้ไข</button>' +
-          '<button class="btn btn-danger btn-sm" data-action="delete-project" data-id="' + p.id + '">ลบ</button>' +
-        '</div>' +
-      '</div>' +
-    '</div>';
+  var catFilterOptions = '<option value="all">ทุกกลุ่มงาน</option>' + CATEGORY_GROUPS.map(function(c){
+    return '<option value="' + c.id + '"' + (projectFilterCategory===c.id?' selected':'') + '>' + esc(c.label) + '</option>';
   }).join('');
+  var prioFilterOptions = '<option value="all">ทุกระดับความสำคัญ</option>' + PRIORITY_LEVELS.map(function(pr){
+    return '<option value="' + pr.id + '"' + (projectFilterPriority===pr.id?' selected':'') + '>' + esc(pr.label) + '</option>';
+  }).join('');
+  var filterBar = '<div class="filter-bar">' +
+    '<select data-action="filter-project-category">' + catFilterOptions + '</select>' +
+    '<select data-action="filter-project-priority">' + prioFilterOptions + '</select>' +
+    '<input type="text" id="f-filter-owner" value="' + esc(projectFilterOwner) + '" placeholder="ค้นหาเจ้าของโปรเจกต์ (กด Enter)" style="padding:8px 11px; border:1px solid var(--line); border-radius:8px; font-size:13px; min-width:200px; font-family:IBM Plex Sans;">' +
+    '<button class="btn btn-ghost btn-sm" data-action="apply-owner-filter">ค้นหา</button>' +
+    (projectFilterCategory!=='all'||projectFilterPriority!=='all'||projectFilterOwner ? '<button class="btn btn-ghost btn-sm" data-action="clear-project-filters">ล้างตัวกรอง</button>' : '') +
+  '</div>';
 
-  return head + '<div class="project-grid">' + cards + '</div>';
+  var filtered = projects.filter(function(p){
+    if(projectFilterCategory !== 'all' && p.category !== projectFilterCategory) return false;
+    if(projectFilterPriority !== 'all' && p.priority !== projectFilterPriority) return false;
+    if(projectFilterOwner && (!p.owner || p.owner.toLowerCase().indexOf(projectFilterOwner.toLowerCase()) === -1)) return false;
+    return true;
+  });
+
+  var gridHtml;
+  if(filtered.length === 0){
+    gridHtml = '<div class="empty-state">' +
+      '<div class="es-icon">&#128269;</div>' +
+      '<div class="es-title">ไม่พบโปรเจกต์ที่ตรงกับตัวกรอง</div>' +
+      '<div class="es-sub">ลองเปลี่ยนหรือล้างตัวกรองดู</div>' +
+    '</div>';
+  } else {
+    var cards = filtered.map(function(p){
+      var pt = tasksOfProject(p.id);
+      var total = pt.length;
+      var done = pt.filter(function(t){ return Number(t.progress) === 100; }).length;
+      var overdue = pt.filter(isOverdue).length;
+      var pct = total ? Math.round(pt.reduce(function(s,t){ return s + Number(t.progress); },0) / total) : 0;
+      var scolor = pct === 100 ? 'var(--teal)' : (pct === 0 ? 'var(--slate)' : 'var(--amber)');
+      var catLabel = projectCategoryLabel(p);
+      var prio = p.priority ? priorityById(p.priority) : null;
+      return '<div class="panel project-card" style="--pcolor:' + p.color + '" data-action="open-project" data-id="' + p.id + '">' +
+        '<div class="project-card-top">' +
+          '<div style="display:flex; gap:8px;"><span class="project-tag" style="--pcolor:' + p.color + '"></span>' +
+            '<div><div class="project-name">' + esc(p.name) + '</div>' +
+            (p.description ? '<div class="project-desc">' + esc(p.description) + '</div>' : '') + '</div>' +
+          '</div>' +
+          '<div class="stamp-wrap"><div class="stamp" style="--spct:' + pct + '; --scolor:' + scolor + '"><span>' + pct + '%</span></div></div>' +
+        '</div>' +
+        '<div style="display:flex; gap:6px; flex-wrap:wrap;">' +
+          (prio ? '<span class="badge ' + prio.cls + '">' + prio.label + '</span>' : '') +
+          (catLabel ? '<span class="badge badge-cat">' + esc(catLabel) + '</span>' : '') +
+        '</div>' +
+        (p.owner ? '<div style="font-size:11.5px; color:var(--ink-faint);">เจ้าของโปรเจกต์: ' + esc(p.owner) + '</div>' : '') +
+        '<div class="project-card-bottom">' +
+          '<div class="project-stats">' +
+            '<div>งานทั้งหมด <b>' + total + '</b> &middot; เสร็จแล้ว <b>' + done + '</b>' + (overdue ? ' &middot; <span style="color:var(--coral); font-weight:700;">เลยกำหนด ' + overdue + '</span>' : '') + '</div>' +
+          '</div>' +
+          '<div class="card-actions">' +
+            '<button class="btn btn-ghost btn-sm" data-action="edit-project" data-id="' + p.id + '">แก้ไข</button>' +
+            '<button class="btn btn-danger btn-sm" data-action="delete-project" data-id="' + p.id + '">ลบ</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    gridHtml = '<div class="project-grid">' + cards + '</div>';
+  }
+
+  return head + ganttPanel + filterBar + gridHtml;
 }
 
 /* ===================== Project detail ===================== */
 function renderProjectDetail(){
   var p = projectById(currentProjectId);
   if(!p){ currentProjectId = null; return renderProjectsList(); }
-  var pt = tasksOfProject(p.id).slice().sort(function(a,b){ return (a.dueDate||'9999').localeCompare(b.dueDate||'9999'); });
+  var pt = sortByStartDate(tasksOfProject(p.id));
+  var catLabel = projectCategoryLabel(p);
+  var prio = p.priority ? priorityById(p.priority) : null;
 
-  var head = '<button class="back-link" data-action="back-to-projects">&larr; กลับไปหน้าโปรเจกต์</button>' +
+  var head = '<button class="back-link" data-action="back-to-projects">&larr; กลับไปหน้าแรก</button>' +
     '<div class="page-head">' +
       '<div><div class="page-title" style="display:flex; align-items:center; gap:8px;"><span class="project-tag" style="--pcolor:' + p.color + '"></span>' + esc(p.name) + '</div>' +
-      (p.description ? '<div class="page-desc">' + esc(p.description) + '</div>' : '') + '</div>' +
+      (p.description ? '<div class="page-desc">' + esc(p.description) + '</div>' : '') +
+      '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">' +
+        (prio ? '<span class="badge ' + prio.cls + '">' + prio.label + '</span>' : '') +
+        (catLabel ? '<span class="badge badge-cat">' + esc(catLabel) + '</span>' : '') +
+        (p.owner ? '<span class="badge badge-slate">เจ้าของ: ' + esc(p.owner) + '</span>' : '') +
+      '</div></div>' +
       '<button class="btn btn-primary" data-action="open-task-modal" data-id="' + p.id + '">+ เพิ่มงาน</button>' +
     '</div>';
 
@@ -512,8 +596,9 @@ function renderProjectDetail(){
 
   var rows = pt.map(function(t){
     var s = statusInfo(t);
+    var note = latestNote(t);
     return '<tr class="task-row" data-action="open-task-detail" data-id="' + t.id + '">' +
-      '<td><div class="task-title">' + esc(t.title) + '</div>' + (t.notes && t.notes.length ? '<div class="task-meta">บันทึก ' + t.notes.length + ' รายการ</div>' : '') + '</td>' +
+      '<td><div class="task-title">' + esc(t.title) + '</div>' + (note ? '<div class="task-meta">&#128172; ' + esc(truncate(note.text, 70)) + '</div>' : '') + '</td>' +
       '<td>' + esc(t.assignee) + '</td>' +
       '<td class="mono">' + fmtDateThai(t.startDate) + '</td>' +
       '<td class="mono">' + fmtDateThai(t.dueDate) + '</td>' +
@@ -529,17 +614,21 @@ function renderProjectDetail(){
   '</table></div></div>';
 }
 
-/* ===================== Gantt ===================== */
-function renderGanttView(){
-  var head = '<div class="page-head">' +
-      '<div><div class="page-title">แผนภูมิแกนต์</div><div class="page-desc">ภาพรวมระยะเวลาดำเนินงานของทุกโปรเจกต์</div></div>' +
-    '</div>';
-
+/* ===================== Gantt (embedded in home page) ===================== */
+function renderGanttSection(){
   var filterOptions = '<option value="all">ทุกโปรเจกต์</option>' + projects.map(function(p){
     return '<option value="' + p.id + '"' + (ganttFilterProject===p.id?' selected':'') + '>' + esc(p.name) + '</option>';
   }).join('');
-  var filterBar = '<div class="filter-bar"><label style="font-size:12.5px; color:var(--ink-soft); font-weight:600;">กรองตามโปรเจกต์:</label>' +
-    '<select data-action="filter-gantt">' + filterOptions + '</select></div>';
+  var controlBar = '<div class="filter-bar">' +
+    '<label style="font-size:12.5px; color:var(--ink-soft); font-weight:600;">โปรเจกต์:</label>' +
+    '<select data-action="filter-gantt">' + filterOptions + '</select>' +
+    '<label style="font-size:12.5px; color:var(--ink-soft); font-weight:600; margin-left:8px;">แสดงช่วง:</label>' +
+    '<input type="date" id="gantt-range-start" value="' + (ganttRangeStart||'') + '" style="padding:7px 9px; border:1px solid var(--line); border-radius:8px; font-size:12.5px;">' +
+    '<span style="color:var(--ink-faint); font-size:12.5px;">ถึง</span>' +
+    '<input type="date" id="gantt-range-end" value="' + (ganttRangeEnd||'') + '" style="padding:7px 9px; border:1px solid var(--line); border-radius:8px; font-size:12.5px;">' +
+    '<button class="btn btn-ghost btn-sm" data-action="apply-gantt-range">แสดงช่วงนี้</button>' +
+    '<button class="btn btn-ghost btn-sm" data-action="fit-gantt-range">&#8596; Fit ทั้งหมด</button>' +
+  '</div>';
 
   var legend = '<div class="gantt-legend">' +
     '<div class="legend-item"><span class="legend-dot" style="background:var(--slate)"></span>ยังไม่ได้ดำเนินการ</div>' +
@@ -549,31 +638,51 @@ function renderGanttView(){
   '</div>';
 
   var relevantProjects = ganttFilterProject === 'all' ? projects : projects.filter(function(p){ return p.id === ganttFilterProject; });
-  var relevantTasks = tasks.filter(function(t){
+  var baseTasks = tasks.filter(function(t){
     if(!t.startDate || !t.dueDate) return false;
     if(ganttFilterProject === 'all') return true;
     return t.projectId === ganttFilterProject;
   });
 
-  if(relevantTasks.length === 0){
-    return head + filterBar + '<div class="empty-state">' +
+  if(baseTasks.length === 0){
+    return controlBar + '<div class="empty-state">' +
       '<div class="es-icon">&#128197;</div>' +
       '<div class="es-title">ยังไม่มีข้อมูลสำหรับแสดงแผนภูมิ</div>' +
       '<div class="es-sub">เพิ่มงานที่มีวันเริ่มต้นและวันกำหนดส่งในโปรเจกต์ก่อน</div>' +
     '</div>';
   }
 
-  var minD = null, maxD = null;
-  relevantTasks.forEach(function(t){
-    var s = parseDateStr(t.startDate), e = parseDateStr(t.dueDate);
-    if(!minD || s < minD) minD = s;
-    if(!maxD || e > maxD) maxD = e;
-  });
-  var rangeStart = addDays(minD, -2);
-  var rangeEnd = addDays(maxD, 3);
-  var totalDays = dayDiff(rangeStart, rangeEnd) + 1;
+  var rangeStart, rangeEnd;
+  if(ganttRangeStart && ganttRangeEnd && ganttRangeStart <= ganttRangeEnd){
+    rangeStart = parseDateStr(ganttRangeStart);
+    rangeEnd = parseDateStr(ganttRangeEnd);
+  } else {
+    var minD = null, maxD = null;
+    baseTasks.forEach(function(t){
+      var s = parseDateStr(t.startDate), e = parseDateStr(t.dueDate);
+      if(!minD || s < minD) minD = s;
+      if(!maxD || e > maxD) maxD = e;
+    });
+    rangeStart = addDays(minD, -2);
+    rangeEnd = addDays(maxD, 3);
+  }
+  var totalDays = Math.max(1, dayDiff(rangeStart, rangeEnd) + 1);
   var dayWidth = 24;
   var timelineWidth = totalDays * dayWidth;
+
+  // tasks visible within the selected range (clipped)
+  var relevantTasks = baseTasks.filter(function(t){
+    var ts = parseDateStr(t.startDate), te = parseDateStr(t.dueDate);
+    return te >= rangeStart && ts <= rangeEnd;
+  });
+
+  if(relevantTasks.length === 0){
+    return controlBar + '<div class="empty-state">' +
+      '<div class="es-icon">&#128269;</div>' +
+      '<div class="es-title">ไม่มีงานในช่วงเวลาที่เลือก</div>' +
+      '<div class="es-sub">ลองกด "Fit ทั้งหมด" เพื่อแสดงทุกโปรเจกต์</div>' +
+    '</div>';
+  }
 
   // build week ticks
   var ticksHtml = '';
@@ -600,28 +709,33 @@ function renderGanttView(){
   }
 
   var projectsWithTasks = relevantProjects.filter(function(p){
-    return tasksOfProject(p.id).some(function(t){ return t.startDate && t.dueDate; });
+    return relevantTasks.some(function(t){ return t.projectId === p.id; });
   });
   var bodyHeight = projectsWithTasks.reduce(function(acc,p){
-    return acc + 30 + tasksOfProject(p.id).filter(function(t){ return t.startDate && t.dueDate; }).length*42;
+    return acc + 30 + relevantTasks.filter(function(t){ return t.projectId === p.id; }).length*42;
   },0);
 
   var labelsHtml = '<div class="gantt-label-head">งาน / ผู้รับผิดชอบ</div>';
   var rowsHtml = '<div class="gantt-body-rows" style="width:' + timelineWidth + 'px; min-height:' + bodyHeight + 'px;">' + bgTicks + todayLineHtml;
 
   projectsWithTasks.forEach(function(p){
-    var pts = tasksOfProject(p.id).filter(function(t){ return t.startDate && t.dueDate; });
+    var pts = sortByStartDate(relevantTasks.filter(function(t){ return t.projectId === p.id; }));
     labelsHtml += '<div class="gantt-group-row">' + esc(p.name) + '</div>';
     rowsHtml += '<div class="gantt-group-track"></div>';
     pts.forEach(function(t){
       var s = statusInfo(t);
-      var startIdx = dayDiff(rangeStart, parseDateStr(t.startDate));
-      var span = dayDiff(parseDateStr(t.startDate), parseDateStr(t.dueDate)) + 1;
+      var note = latestNote(t);
+      var ts = parseDateStr(t.startDate), te = parseDateStr(t.dueDate);
+      var visStart = ts < rangeStart ? rangeStart : ts;
+      var visEnd = te > rangeEnd ? rangeEnd : te;
+      var startIdx = dayDiff(rangeStart, visStart);
+      var span = dayDiff(visStart, visEnd) + 1;
       var left = startIdx*dayWidth;
       var width = Math.max(dayWidth-2, span*dayWidth - 3);
+      var tooltip = esc(t.title) + ' (' + t.progress + '%)' + (note ? ' — ' + esc(truncate(note.text, 60)) : '');
       labelsHtml += '<div class="gantt-label-row"><div><div class="glr-title">' + esc(t.title) + '</div><div class="glr-sub">' + esc(t.assignee) + '</div></div></div>';
       rowsHtml += '<div class="gantt-row-track">' +
-        '<div class="gantt-bar" data-action="open-task-detail" data-id="' + t.id + '" style="left:' + left + 'px; width:' + width + 'px; background:' + s.color + ';" title="' + esc(t.title) + ' (' + t.progress + '%)">' +
+        '<div class="gantt-bar" data-action="open-task-detail" data-id="' + t.id + '" style="left:' + left + 'px; width:' + width + 'px; background:' + s.color + ';" title="' + tooltip + '">' +
           (width > 50 ? (t.progress + '%') : '') +
         '</div>' +
       '</div>';
@@ -637,7 +751,7 @@ function renderGanttView(){
     '</div></div>' +
   '</div>';
 
-  return head + filterBar + legend + gantt;
+  return controlBar + legend + gantt;
 }
 
 /* ===================== Overview & Workload ===================== */
@@ -732,11 +846,29 @@ function projectModalHtml(editId){
   var swatches = PROJECT_COLORS.map(function(c){
     return '<div class="swatch' + (c===color?' selected':'') + '" style="background:' + c + '" data-action="pick-color" data-color="' + c + '"></div>';
   }).join('');
+  var selectedCat = p && p.category ? p.category : CATEGORY_GROUPS[0].id;
+  var catOptions = CATEGORY_GROUPS.map(function(c){
+    return '<option value="' + c.id + '"' + (c.id===selectedCat?' selected':'') + '>' + esc(c.label) + ' (' + esc(c.sub) + ')</option>';
+  }).join('');
+  var selectedPriority = p && p.priority ? p.priority : 'medium';
+  var prioOptions = PRIORITY_LEVELS.map(function(pr){
+    return '<option value="' + pr.id + '"' + (pr.id===selectedPriority?' selected':'') + '>' + esc(pr.label) + '</option>';
+  }).join('');
+  var catDesc = categoryById(selectedCat) ? categoryById(selectedCat).desc : '';
+
   return '' +
   '<div class="modal-head"><h3>' + (p ? 'แก้ไขโปรเจกต์' : 'เพิ่มโปรเจกต์ใหม่') + '</h3><button class="modal-close" data-action="close-modal">&times;</button></div>' +
   '<div class="modal-body">' +
     '<div class="field"><label>ชื่อโปรเจกต์ *</label><input type="text" id="f-project-name" value="' + (p?esc(p.name):'') + '" placeholder="เช่น Open Showcase Series / ลูกค้า ABC"></div>' +
     '<div class="field"><label>รายละเอียด / ลูกค้า (ไม่บังคับ)</label><textarea id="f-project-desc" placeholder="รายละเอียดเพิ่มเติม">' + (p?esc(p.description):'') + '</textarea></div>' +
+    '<div class="field"><label>เจ้าของโปรเจกต์ (ไม่บังคับ)</label><input type="text" id="f-project-owner" value="' + (p?esc(p.owner||''):'') + '" placeholder="ชื่อผู้รับผิดชอบหลักของโปรเจกต์"></div>' +
+    '<div class="field-row">' +
+      '<div class="field"><label>กลุ่มงานด้านคุณภาพ</label><select id="f-project-category">' + catOptions + '</select>' +
+        '<div id="f-category-desc-hint" style="font-size:11.5px; color:var(--ink-faint); margin-top:6px; line-height:1.4;">' + esc(catDesc) + '</div>' +
+      '</div>' +
+      '<div class="field"><label>ระดับความสำคัญ</label><select id="f-project-priority">' + prioOptions + '</select></div>' +
+    '</div>' +
+    '<div class="field" id="f-category-other-wrap" style="display:' + (selectedCat==='other'?'block':'none') + ';"><label>ระบุกลุ่มงาน (อื่นๆ)</label><input type="text" id="f-project-category-other" value="' + (p?esc(p.categoryOther||''):'') + '" placeholder="พิมพ์ชื่อกลุ่มงานที่ต้องการ"></div>' +
     '<div class="field"><label>สีประจำโปรเจกต์</label><div class="swatches" id="f-project-swatches" data-color="' + color + '">' + swatches + '</div></div>' +
     '<div class="field-error" id="f-project-error">กรุณากรอกชื่อโปรเจกต์</div>' +
   '</div>' +
@@ -816,6 +948,11 @@ function taskDetailModalHtml(taskId){
 function handleSaveProject(editId){
   var name = document.getElementById('f-project-name').value.trim();
   var desc = document.getElementById('f-project-desc').value.trim();
+  var owner = document.getElementById('f-project-owner').value.trim();
+  var category = document.getElementById('f-project-category').value;
+  var categoryOtherEl = document.getElementById('f-project-category-other');
+  var categoryOther = categoryOtherEl ? categoryOtherEl.value.trim() : '';
+  var priority = document.getElementById('f-project-priority').value;
   var color = document.getElementById('f-project-swatches').getAttribute('data-color');
   var errEl = document.getElementById('f-project-error');
   if(!name){ errEl.classList.add('show'); return; }
@@ -824,9 +961,12 @@ function handleSaveProject(editId){
   var proj;
   if(editId){
     proj = projectById(editId);
-    if(proj){ proj.name = name; proj.description = desc; proj.color = color; }
+    if(proj){
+      proj.name = name; proj.description = desc; proj.color = color;
+      proj.owner = owner; proj.category = category; proj.categoryOther = categoryOther; proj.priority = priority;
+    }
   } else {
-    proj = { id: uid('proj'), name: name, description: desc, color: color, createdAt: Date.now() };
+    proj = { id: uid('proj'), name: name, description: desc, color: color, owner: owner, category: category, categoryOther: categoryOther, priority: priority, createdAt: Date.now() };
     projects.push(proj);
   }
   pushProject(proj);
@@ -972,6 +1112,27 @@ document.addEventListener('click', function(e){
     case 'add-note':
       handleAddNote(id);
       break;
+    case 'apply-owner-filter':
+      projectFilterOwner = document.getElementById('f-filter-owner').value.trim();
+      render();
+      break;
+    case 'clear-project-filters':
+      projectFilterCategory = 'all';
+      projectFilterPriority = 'all';
+      projectFilterOwner = '';
+      render();
+      break;
+    case 'apply-gantt-range':
+      var gs = document.getElementById('gantt-range-start').value;
+      var ge = document.getElementById('gantt-range-end').value;
+      if(gs && ge && gs <= ge){ ganttRangeStart = gs; ganttRangeEnd = ge; }
+      render();
+      break;
+    case 'fit-gantt-range':
+      ganttRangeStart = null;
+      ganttRangeEnd = null;
+      render();
+      break;
     case 'close-modal':
       closeModal();
       break;
@@ -981,14 +1142,39 @@ document.addEventListener('click', function(e){
 }, false);
 
 document.addEventListener('change', function(e){
-  if(e.target && e.target.getAttribute('data-action') === 'filter-gantt'){
+  if(!e.target) return;
+  var action = e.target.getAttribute('data-action');
+  if(action === 'filter-gantt'){
     ganttFilterProject = e.target.value;
     render();
+    return;
+  }
+  if(action === 'filter-project-category'){
+    projectFilterCategory = e.target.value;
+    render();
+    return;
+  }
+  if(action === 'filter-project-priority'){
+    projectFilterPriority = e.target.value;
+    render();
+    return;
+  }
+  if(e.target.id === 'f-project-category'){
+    var catId = e.target.value;
+    var hint = document.getElementById('f-category-desc-hint');
+    var c = categoryById(catId);
+    if(hint) hint.textContent = c ? c.desc : '';
+    var otherWrap = document.getElementById('f-category-other-wrap');
+    if(otherWrap) otherWrap.style.display = (catId === 'other') ? 'block' : 'none';
   }
 }, false);
 
 document.addEventListener('keydown', function(e){
   if(e.key === 'Escape') closeModal();
+  if(e.key === 'Enter' && e.target && e.target.id === 'f-filter-owner'){
+    projectFilterOwner = e.target.value.trim();
+    render();
+  }
 }, false);
 
 /* ===================== Init ===================== */
