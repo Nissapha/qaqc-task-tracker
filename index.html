@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QA/QC Task Tracker</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+
+:root{
+  --bg:#F1F5F7;
+  --panel:#FFFFFF;
+  --ink:#1C2733;
+  --ink-soft:#62707F;
+  --ink-faint:#94A2AF;
+  --line:#DCE4E9;
+  --line-soft:#E9EFF2;
+  --navy:#163A53;
+  --navy-deep:#0E2738;
+  --navy-soft:#E4ECF1;
+  --teal:#2A9D8F;
+  --teal-soft:#E1F1EE;
+  --amber:#E8954B;
+  --amber-soft:#FBEEE0;
+  --coral:#D9614F;
+  --coral-soft:#F9E5E1;
+  --slate:#94A2AF;
+  --slate-soft:#EBEFF2;
+  --radius:10px;
+  --shadow: 0 1px 2px rgba(14,39,56,0.05), 0 6px 18px rgba(14,39,56,0.07);
+}
+
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  font-family:'IBM Plex Sans', sans-serif;
+  background-color:var(--bg);
+  background-image:
+    linear-gradient(var(--line-soft) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+  background-size: 28px 28px;
+  color:var(--ink);
+  min-height:100vh;
+}
+.mono{font-family:'IBM Plex Mono', monospace;}
+
+/* ---------- Topbar ---------- */
+.topbar{
+  background:linear-gradient(135deg, var(--navy) 0%, var(--navy-deep) 100%);
+  color:#fff;
+  padding:18px 24px 0 24px;
+  position:sticky; top:0; z-index:30;
+  box-shadow:0 4px 16px rgba(14,39,56,0.18);
+}
+.topbar-inner{
+  display:flex; align-items:flex-end; justify-content:space-between;
+  max-width:1280px; margin:0 auto;
+  flex-wrap:wrap; gap:12px;
+}
+.brand{display:flex; flex-direction:column; gap:2px; padding-bottom:14px;}
+.brand-eyebrow{
+  font-family:'IBM Plex Mono'; font-size:11px; letter-spacing:0.18em; color:#9FC3D6; text-transform:uppercase;
+}
+.brand-title{font-size:22px; font-weight:700; letter-spacing:-0.01em;}
+.brand-sub{font-size:12.5px; color:#B9D2DE;}
+.tabs{display:flex; gap:4px;}
+.tab{
+  background:transparent; border:none; color:#C8DCE6; cursor:pointer;
+  font-family:'IBM Plex Sans'; font-size:14px; font-weight:600;
+  padding:10px 16px 12px 16px; border-radius:8px 8px 0 0;
+  position:relative; top:1px;
+}
+.tab:hover{color:#fff;}
+.tab.active{background:var(--bg); color:var(--navy);}
+.tab .tab-dot{display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--coral); margin-left:6px; vertical-align:middle;}
+
+/* ---------- Layout ---------- */
+.page{max-width:1280px; margin:0 auto; padding:26px 24px 60px 24px;}
+.page-head{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:18px;}
+.page-title{font-size:19px; font-weight:700; color:var(--navy);}
+.page-desc{font-size:13px; color:var(--ink-soft); margin-top:2px;}
+
+.btn{
+  font-family:'IBM Plex Sans'; font-size:13.5px; font-weight:600; cursor:pointer;
+  border-radius:8px; padding:9px 16px; border:1px solid transparent; transition:transform .08s ease, box-shadow .15s ease;
+  display:inline-flex; align-items:center; gap:6px;
+}
+.btn:active{transform:scale(0.97);}
+.btn-primary{background:var(--navy); color:#fff;}
+.btn-primary:hover{background:var(--navy-deep);}
+.btn-ghost{background:var(--panel); color:var(--navy); border:1px solid var(--line);}
+.btn-ghost:hover{border-color:var(--navy);}
+.btn-danger{background:var(--coral-soft); color:var(--coral); border:1px solid #F0C7BF;}
+.btn-danger:hover{background:#F4D6CF;}
+.btn-sm{padding:6px 11px; font-size:12.5px; border-radius:7px;}
+.btn[disabled]{opacity:0.45; cursor:not-allowed;}
+
+.panel{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow);}
+
+/* ---------- Empty state ---------- */
+.empty-state{
+  text-align:center; padding:56px 24px; color:var(--ink-soft);
+  border:1.5px dashed var(--line); border-radius:var(--radius); background:repeating-linear-gradient(135deg, var(--panel) 0 10px, #FAFCFD 10px 20px);
+}
+.empty-state .es-icon{font-size:28px; margin-bottom:10px;}
+.empty-state .es-title{font-weight:700; color:var(--navy); font-size:15px; margin-bottom:4px;}
+.empty-state .es-sub{font-size:13px; max-width:380px; margin:0 auto 16px auto;}
+
+/* ---------- KPI ---------- */
+.kpi-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px;}
+@media (max-width:880px){.kpi-grid{grid-template-columns:repeat(2,1fr);}}
+.kpi-card{padding:16px 18px; position:relative; overflow:hidden;}
+.kpi-card::before{content:''; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--accent, var(--navy));}
+.kpi-label{font-size:11.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.06em; font-weight:600;}
+.kpi-value{font-family:'IBM Plex Mono'; font-size:28px; font-weight:700; color:var(--ink); margin-top:6px;}
+.kpi-foot{font-size:12px; color:var(--ink-faint); margin-top:4px;}
+
+/* ---------- Stamp (circular progress) ---------- */
+.stamp-wrap{
+  width:56px; height:56px; border-radius:50%; border:2px dashed var(--line);
+  display:flex; align-items:center; justify-content:center; flex-shrink:0;
+}
+.stamp{
+  width:44px; height:44px; border-radius:50%;
+  background:conic-gradient(var(--scolor) calc(var(--spct)*1%), var(--slate-soft) 0);
+  display:flex; align-items:center; justify-content:center; position:relative;
+}
+.stamp::before{content:''; position:absolute; inset:4px; border-radius:50%; background:var(--panel);}
+.stamp span{position:relative; font-family:'IBM Plex Mono'; font-weight:700; font-size:11.5px; color:var(--scolor);}
+
+/* ---------- Projects grid ---------- */
+.project-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:14px;}
+@media (max-width:980px){.project-grid{grid-template-columns:repeat(2,1fr);}}
+@media (max-width:680px){.project-grid{grid-template-columns:1fr;}}
+.project-card{padding:18px; cursor:pointer; transition:box-shadow .15s ease, border-color .15s ease; display:flex; flex-direction:column; gap:12px;}
+.project-card:hover{border-color:var(--pcolor); box-shadow:0 2px 4px rgba(14,39,56,0.06), 0 10px 22px rgba(14,39,56,0.1);}
+.project-card-top{display:flex; align-items:flex-start; justify-content:space-between; gap:10px;}
+.project-tag{width:10px; height:10px; border-radius:3px; background:var(--pcolor); flex-shrink:0; margin-top:5px;}
+.project-name{font-size:15px; font-weight:700; color:var(--navy); line-height:1.3;}
+.project-desc{font-size:12.5px; color:var(--ink-soft); margin-top:3px; line-height:1.4;}
+.project-card-bottom{display:flex; align-items:center; justify-content:space-between; border-top:1px solid var(--line-soft); padding-top:12px;}
+.project-stats{font-size:12px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px;}
+.project-stats b{color:var(--ink); font-family:'IBM Plex Mono';}
+.card-actions{display:flex; gap:6px;}
+
+/* ---------- Tables ---------- */
+.table-wrap{overflow-x:auto;}
+table.tk{width:100%; border-collapse:collapse; font-size:13px;}
+table.tk th{
+  text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--ink-soft);
+  font-weight:600; padding:10px 12px; border-bottom:1.5px solid var(--line); background:#FAFCFD; white-space:nowrap;
+}
+table.tk td{padding:10px 12px; border-bottom:1px solid var(--line-soft); vertical-align:middle;}
+table.tk tr.task-row{cursor:pointer;}
+table.tk tr.task-row:hover{background:#FAFCFD;}
+.task-title{font-weight:600; color:var(--ink);}
+.task-meta{font-size:11.5px; color:var(--ink-faint); margin-top:2px;}
+
+.badge{
+  display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600; padding:4px 9px;
+  border-radius:20px; white-space:nowrap;
+}
+.badge-slate{background:var(--slate-soft); color:#5C6B79;}
+.badge-amber{background:var(--amber-soft); color:#A85F22;}
+.badge-teal{background:var(--teal-soft); color:#1D7468;}
+.badge-coral{background:var(--coral-soft); color:#B8412E;}
+.badge::before{content:''; width:6px; height:6px; border-radius:50%; background:currentColor;}
+
+.progress-track{width:90px; height:7px; background:var(--slate-soft); border-radius:5px; overflow:hidden;}
+.progress-fill{height:100%; border-radius:5px;}
+
+/* ---------- Forms / Modal ---------- */
+.modal-overlay{
+  position:fixed; inset:0; background:rgba(14,39,56,0.45); backdrop-filter:blur(2px);
+  display:flex; align-items:center; justify-content:center; padding:20px; z-index:100;
+}
+.modal-panel{
+  background:var(--panel); border-radius:14px; max-width:560px; width:100%; max-height:88vh; overflow-y:auto;
+  box-shadow:0 20px 60px rgba(14,39,56,0.35); animation:modalIn .15s ease;
+}
+@keyframes modalIn{from{opacity:0; transform:translateY(6px) scale(0.98);} to{opacity:1; transform:translateY(0) scale(1);}}
+.modal-head{padding:18px 22px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between;}
+.modal-head h3{margin:0; font-size:16px; color:var(--navy); font-weight:700;}
+.modal-close{background:none; border:none; cursor:pointer; font-size:18px; color:var(--ink-faint); padding:2px 6px;}
+.modal-body{padding:20px 22px;}
+.modal-foot{padding:14px 22px 20px 22px; display:flex; justify-content:flex-end; gap:8px;}
+
+.field{margin-bottom:14px;}
+.field label{display:block; font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:6px;}
+.field input[type=text], .field input[type=date], .field select, .field textarea{
+  width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:8px; font-size:13.5px;
+  font-family:'IBM Plex Sans'; color:var(--ink); background:#FCFDFE;
+}
+.field textarea{resize:vertical; min-height:60px; font-family:'IBM Plex Sans';}
+.field input:focus, .field select:focus, .field textarea:focus{outline:2px solid var(--navy); outline-offset:1px; border-color:var(--navy);}
+.field-row{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+.field-error{color:var(--coral); font-size:12px; margin-top:6px; display:none;}
+.field-error.show{display:block;}
+.swatches{display:flex; gap:8px;}
+.swatch{width:26px; height:26px; border-radius:7px; cursor:pointer; border:2px solid transparent;}
+.swatch.selected{border-color:var(--ink);}
+
+/* ---------- Task detail modal ---------- */
+.task-detail-meta{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px; font-size:13px;}
+.tdm-item{background:#FAFCFD; border:1px solid var(--line-soft); border-radius:8px; padding:9px 11px;}
+.tdm-item .tdm-label{font-size:10.5px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:2px;}
+.tdm-item .tdm-value{font-weight:600; color:var(--ink); font-family:'IBM Plex Mono'; font-size:13px;}
+
+.notes-list{display:flex; flex-direction:column; gap:10px; max-height:220px; overflow-y:auto; margin-top:10px; padding-right:4px;}
+.note-item{background:#FAFCFD; border-left:3px solid var(--navy-soft); border-radius:6px; padding:8px 11px;}
+.note-date{font-size:11px; color:var(--ink-faint); font-family:'IBM Plex Mono'; margin-bottom:3px;}
+.note-text{font-size:13px; color:var(--ink); line-height:1.45; white-space:pre-wrap;}
+.section-label{font-size:12.5px; font-weight:700; color:var(--navy); margin:18px 0 8px 0; display:flex; align-items:center; gap:6px;}
+.add-note-row{display:flex; gap:8px; margin-top:10px; align-items:flex-start;}
+.add-note-row textarea{flex:1;}
+
+/* ---------- Gantt ---------- */
+.gantt-legend{display:flex; gap:16px; margin-bottom:14px; flex-wrap:wrap;}
+.legend-item{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink-soft);}
+.legend-dot{width:10px; height:10px; border-radius:3px;}
+.gantt-wrap{display:flex; border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; background:var(--panel);}
+.gantt-labels{width:230px; flex-shrink:0; border-right:1.5px solid var(--line); background:#FAFCFD;}
+.gantt-label-head{height:46px; border-bottom:1.5px solid var(--line); display:flex; align-items:center; padding:0 12px; font-size:11px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.05em;}
+.gantt-label-row{height:42px; display:flex; align-items:center; padding:0 12px; border-bottom:1px solid var(--line-soft); font-size:12.5px;}
+.gantt-label-row .glr-title{font-weight:600; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.gantt-label-row .glr-sub{font-size:10.5px; color:var(--ink-faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.gantt-group-row{height:30px; background:var(--navy-soft); display:flex; align-items:center; padding:0 12px; font-size:11.5px; font-weight:700; color:var(--navy); border-bottom:1px solid var(--line-soft);}
+.gantt-scroll{overflow-x:auto; flex:1;}
+.gantt-timeline{position:relative;}
+.gantt-tick-row{height:46px; position:relative; border-bottom:1.5px solid var(--line);}
+.gantt-tick{position:absolute; top:0; bottom:0; border-left:1px solid var(--line-soft);}
+.gantt-tick-label{position:absolute; top:14px; font-size:10.5px; color:var(--ink-faint); font-family:'IBM Plex Mono'; padding-left:4px; white-space:nowrap;}
+.gantt-body-rows{position:relative;}
+.gantt-bg-tick{position:absolute; top:0; bottom:0; border-left:1px solid var(--line-soft); z-index:0;}
+.gantt-row-track{height:42px; border-bottom:1px solid var(--line-soft); position:relative;}
+.gantt-group-track{height:30px; background:var(--navy-soft); border-bottom:1px solid var(--line-soft); position:relative;}
+.gantt-bar{
+  position:absolute; top:8px; height:26px; border-radius:6px; cursor:pointer;
+  display:flex; align-items:center; padding:0 8px; overflow:hidden;
+  font-size:11px; font-weight:700; color:#fff; white-space:nowrap;
+  box-shadow:0 1px 2px rgba(0,0,0,0.15);
+}
+.gantt-today-line{position:absolute; top:0; bottom:0; width:2px; background:var(--coral); z-index:5;}
+.gantt-today-label{position:absolute; top:-1px; left:5px; font-size:10px; color:var(--coral); font-weight:700; background:var(--panel); padding:1px 4px; border-radius:4px; z-index:6; white-space:nowrap;}
+
+/* ---------- Workload ---------- */
+.wl-row{display:grid; grid-template-columns:160px 1fr 200px; gap:14px; align-items:center; padding:12px 0; border-bottom:1px solid var(--line-soft);}
+.wl-row:last-child{border-bottom:none;}
+.wl-name{font-weight:700; font-size:13.5px; color:var(--ink);}
+.wl-name-sub{font-size:11px; color:var(--ink-faint); font-family:'IBM Plex Mono';}
+.wl-bar-track{height:18px; border-radius:6px; background:var(--slate-soft); overflow:hidden; display:flex;}
+.wl-bar-seg{height:100%;}
+.wl-stats{display:flex; gap:10px; font-size:11.5px; color:var(--ink-soft); justify-content:flex-end; flex-wrap:wrap;}
+.wl-stats b{font-family:'IBM Plex Mono'; color:var(--ink);}
+
+.footer-note{text-align:center; font-size:11.5px; color:var(--ink-faint); margin-top:30px; padding-top:16px; border-top:1px dashed var(--line);}
+.back-link{display:inline-flex; align-items:center; gap:5px; font-size:13px; color:var(--navy); font-weight:600; cursor:pointer; margin-bottom:14px; background:none; border:none; padding:0;}
+.back-link:hover{text-decoration:underline;}
+.filter-bar{display:flex; gap:10px; align-items:center; margin-bottom:14px; flex-wrap:wrap;}
+.filter-bar select{padding:8px 11px; border:1px solid var(--line); border-radius:8px; font-size:13px; background:var(--panel); font-family:'IBM Plex Sans';}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal-root"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* ===================== Firebase ===================== */
+var firebaseConfig = {
+  apiKey: "AIzaSyD9LvSLXfb0KlVVsooBq5hHnwDjvyjC-nU",
+  authDomain: "qa-qc-tracker.firebaseapp.com",
+  databaseURL: "https://qa-qc-tracker-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "qa-qc-tracker",
+  storageBucket: "qa-qc-tracker.firebasestorage.app",
+  messagingSenderId: "319888001304",
+  appId: "1:319888001304:web:77b3cf8eed25d90a15766d",
+  measurementId: "G-8B3Y8B79VD"
+};
+firebase.initializeApp(firebaseConfig);
+var db = firebase.database();
+// Separate data path from the existing QC inspection-records app to avoid collisions
+var projectsRef = db.ref('qaTaskTracker/projects');
+var tasksRef = db.ref('qaTaskTracker/tasks');
+
+
+/* ===================== State ===================== */
+var projects = [];
+var tasks = [];
+var currentView = 'projects';
+var currentProjectId = null;
+var currentTaskId = null;
+var ganttFilterProject = 'all';
+var dataReady = false;
+var firebaseError = null;
+var projectsLoaded = false, tasksLoaded = false;
+
+var PROJECT_COLORS = ['#163A53','#2A9D8F','#E8954B','#D9614F','#6A6FA8','#3D8FA3'];
+
+/* ===================== Storage (Firebase Realtime Database) ===================== */
+function notesToObj(notesArr){
+  var o = {};
+  (notesArr||[]).forEach(function(n){ o[n.id] = n; });
+  return o;
+}
+function notesFromSnapshot(notesVal){
+  if(!notesVal) return [];
+  return Object.keys(notesVal).map(function(k){ return notesVal[k]; });
+}
+function checkReady(){
+  if(projectsLoaded && tasksLoaded) dataReady = true;
+  render();
+}
+function loadAll(){
+  projectsRef.on('value', function(snapshot){
+    var val = snapshot.val() || {};
+    projects = Object.keys(val).map(function(k){ return val[k]; });
+    projectsLoaded = true;
+    checkReady();
+  }, function(err){
+    console.error('projects listener error', err);
+    firebaseError = err && err.message ? err.message : String(err);
+    projectsLoaded = true;
+    checkReady();
+  });
+  tasksRef.on('value', function(snapshot){
+    var val = snapshot.val() || {};
+    tasks = Object.keys(val).map(function(k){
+      var t = val[k];
+      t.notes = notesFromSnapshot(t.notes);
+      return t;
+    });
+    tasksLoaded = true;
+    checkReady();
+  }, function(err){
+    console.error('tasks listener error', err);
+    firebaseError = err && err.message ? err.message : String(err);
+    tasksLoaded = true;
+    checkReady();
+  });
+}
+function pushProject(p){
+  projectsRef.child(p.id).set(p).catch(function(e){ console.error('save project failed', e); });
+}
+function removeProject(id){
+  projectsRef.child(id).remove().catch(function(e){ console.error('delete project failed', e); });
+}
+function pushTask(t){
+  var copy = Object.assign({}, t);
+  copy.notes = notesToObj(t.notes);
+  tasksRef.child(t.id).set(copy).catch(function(e){ console.error('save task failed', e); });
+}
+function removeTask(id){
+  tasksRef.child(id).remove().catch(function(e){ console.error('delete task failed', e); });
+}
+
+/* ===================== Helpers ===================== */
+function uid(prefix){ return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function esc(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+function todayStr(){
+  var d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function parseDateStr(s){ return new Date(s + 'T00:00:00'); }
+function addDays(d, n){ return new Date(d.getTime() + n*86400000); }
+function dayDiff(a,b){ return Math.round((b.getTime() - a.getTime()) / 86400000); }
+function fmtDateThai(s){
+  if(!s) return '-';
+  var d = parseDateStr(s);
+  var months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  return d.getDate() + ' ' + months[d.getMonth()] + ' ' + (d.getFullYear()+543);
+}
+function fmtDateShort(d){
+  var months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  return d.getDate() + ' ' + months[d.getMonth()];
+}
+function fmtTimestamp(ts){
+  var d = new Date(ts);
+  return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + (d.getFullYear()+543) + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+function isOverdue(t){ return t.dueDate && t.dueDate < todayStr() && Number(t.progress) < 100; }
+function statusInfo(t){
+  var p = Number(t.progress);
+  if(isOverdue(t)) return {label:'เลยกำหนด', cls:'badge-coral', color:'var(--coral)'};
+  if(p === 100) return {label:'เสร็จสมบูรณ์', cls:'badge-teal', color:'var(--teal)'};
+  if(p === 0) return {label:'ยังไม่ได้ดำเนินการ', cls:'badge-slate', color:'var(--slate)'};
+  return {label:'กำลังดำเนินการ', cls:'badge-amber', color:'var(--amber)'};
+}
+function projectById(id){ return projects.find(function(p){ return p.id === id; }); }
+function taskById(id){ return tasks.find(function(t){ return t.id === id; }); }
+function tasksOfProject(pid){ return tasks.filter(function(t){ return t.projectId === pid; }); }
+function nextColor(){ return PROJECT_COLORS[projects.length % PROJECT_COLORS.length]; }
+
+/* ===================== Render root ===================== */
+function render(){
+  var app = document.getElementById('app');
+  if(!dataReady){
+    app.innerHTML = '<div style="padding:60px; text-align:center; color:#62707F; font-family:IBM Plex Sans;">กำลังเชื่อมต่อฐานข้อมูล...</div>';
+    return;
+  }
+  var errorBanner = firebaseError ? ('<div class="page" style="padding-bottom:0;"><div class="panel" style="border-color:#F0C7BF; background:#FDF3F1; padding:14px 18px; margin-bottom:0; color:#B8412E; font-size:13px;">' +
+    '⚠️ เชื่อมต่อฐานข้อมูลไม่สำเร็จ: ' + esc(firebaseError) + ' — ตรวจสอบ Firebase Realtime Database Rules (อาจหมดอายุโหมดทดสอบ) หรือการเชื่อมต่ออินเทอร์เน็ต' +
+  '</div></div>') : '';
+  app.innerHTML = errorBanner + renderTopbar() + '<div class="page">' + renderContent() + renderFooter() + '</div>';
+}
+function renderFooter(){
+  return '<div class="footer-note">ข้อมูลซิงค์แบบเรียลไทม์ผ่าน Firebase Realtime Database — ทุกคนที่เปิดหน้านี้จะเห็นและแก้ไขข้อมูลเดียวกัน</div>';
+}
+function renderTopbar(){
+  function tab(view, label){
+    var active = currentView === view ? ' active' : '';
+    return '<button class="tab' + active + '" data-action="goto-view" data-view="' + view + '">' + label + '</button>';
+  }
+  return '' +
+  '<div class="topbar"><div class="topbar-inner">' +
+    '<div class="brand">' +
+      '<div class="brand-eyebrow">THERMEDEZ &middot; QUALITY ASSURANCE</div>' +
+      '<div class="brand-title">QA/QC Task Tracker</div>' +
+      '<div class="brand-sub">ระบบติดตามงานภายในทีม QA/QC</div>' +
+    '</div>' +
+    '<div class="tabs">' +
+      tab('projects','โปรเจกต์') +
+      tab('gantt','แผนภูมิแกนต์') +
+      tab('overview','ภาพรวม &amp; ภาระงาน') +
+    '</div>' +
+  '</div></div>';
+}
+function renderContent(){
+  if(currentView === 'projects'){
+    return currentProjectId ? renderProjectDetail() : renderProjectsList();
+  }
+  if(currentView === 'gantt') return renderGanttView();
+  if(currentView === 'overview') return renderOverviewView();
+  return '';
+}
+
+/* ===================== Projects list ===================== */
+function renderProjectsList(){
+  var head = '<div class="page-head">' +
+      '<div><div class="page-title">โปรเจกต์ทั้งหมด</div><div class="page-desc">จัดกลุ่มงานตรวจสอบคุณภาพตามโปรเจกต์ / ลูกค้า / รุ่นสินค้า</div></div>' +
+      '<button class="btn btn-primary" data-action="open-project-modal">+ เพิ่มโปรเจกต์ใหม่</button>' +
+    '</div>';
+
+  if(projects.length === 0){
+    return head + '<div class="empty-state">' +
+      '<div class="es-icon">&#128203;</div>' +
+      '<div class="es-title">ยังไม่มีโปรเจกต์</div>' +
+      '<div class="es-sub">สร้างโปรเจกต์แรกเพื่อเริ่มติดตามงาน QA/QC เช่น ชื่อรุ่นสินค้า หรือชื่อลูกค้า</div>' +
+      '<button class="btn btn-primary" data-action="open-project-modal">+ เพิ่มโปรเจกต์ใหม่</button>' +
+    '</div>';
+  }
+
+  var cards = projects.map(function(p){
+    var pt = tasksOfProject(p.id);
+    var total = pt.length;
+    var done = pt.filter(function(t){ return Number(t.progress) === 100; }).length;
+    var overdue = pt.filter(isOverdue).length;
+    var pct = total ? Math.round(pt.reduce(function(s,t){ return s + Number(t.progress); },0) / total) : 0;
+    var scolor = pct === 100 ? 'var(--teal)' : (pct === 0 ? 'var(--slate)' : 'var(--amber)');
+    return '<div class="panel project-card" style="--pcolor:' + p.color + '" data-action="open-project" data-id="' + p.id + '">' +
+      '<div class="project-card-top">' +
+        '<div style="display:flex; gap:8px;"><span class="project-tag" style="--pcolor:' + p.color + '"></span>' +
+          '<div><div class="project-name">' + esc(p.name) + '</div>' +
+          (p.description ? '<div class="project-desc">' + esc(p.description) + '</div>' : '') + '</div>' +
+        '</div>' +
+        '<div class="stamp-wrap"><div class="stamp" style="--spct:' + pct + '; --scolor:' + scolor + '"><span>' + pct + '%</span></div></div>' +
+      '</div>' +
+      '<div class="project-card-bottom">' +
+        '<div class="project-stats">' +
+          '<div>งานทั้งหมด <b>' + total + '</b> &middot; เสร็จแล้ว <b>' + done + '</b>' + (overdue ? ' &middot; <span style="color:var(--coral); font-weight:700;">เลยกำหนด ' + overdue + '</span>' : '') + '</div>' +
+        '</div>' +
+        '<div class="card-actions">' +
+          '<button class="btn btn-ghost btn-sm" data-action="edit-project" data-id="' + p.id + '">แก้ไข</button>' +
+          '<button class="btn btn-danger btn-sm" data-action="delete-project" data-id="' + p.id + '">ลบ</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  return head + '<div class="project-grid">' + cards + '</div>';
+}
+
+/* ===================== Project detail ===================== */
+function renderProjectDetail(){
+  var p = projectById(currentProjectId);
+  if(!p){ currentProjectId = null; return renderProjectsList(); }
+  var pt = tasksOfProject(p.id).slice().sort(function(a,b){ return (a.dueDate||'9999').localeCompare(b.dueDate||'9999'); });
+
+  var head = '<button class="back-link" data-action="back-to-projects">&larr; กลับไปหน้าโปรเจกต์</button>' +
+    '<div class="page-head">' +
+      '<div><div class="page-title" style="display:flex; align-items:center; gap:8px;"><span class="project-tag" style="--pcolor:' + p.color + '"></span>' + esc(p.name) + '</div>' +
+      (p.description ? '<div class="page-desc">' + esc(p.description) + '</div>' : '') + '</div>' +
+      '<button class="btn btn-primary" data-action="open-task-modal" data-id="' + p.id + '">+ เพิ่มงาน</button>' +
+    '</div>';
+
+  if(pt.length === 0){
+    return head + '<div class="empty-state">' +
+      '<div class="es-icon">&#9989;</div>' +
+      '<div class="es-title">ยังไม่มีงานในโปรเจกต์นี้</div>' +
+      '<div class="es-sub">เพิ่มงานตรวจสอบคุณภาพ พร้อมกำหนดผู้รับผิดชอบและวันที่</div>' +
+      '<button class="btn btn-primary" data-action="open-task-modal" data-id="' + p.id + '">+ เพิ่มงาน</button>' +
+    '</div>';
+  }
+
+  var rows = pt.map(function(t){
+    var s = statusInfo(t);
+    return '<tr class="task-row" data-action="open-task-detail" data-id="' + t.id + '">' +
+      '<td><div class="task-title">' + esc(t.title) + '</div>' + (t.notes && t.notes.length ? '<div class="task-meta">บันทึก ' + t.notes.length + ' รายการ</div>' : '') + '</td>' +
+      '<td>' + esc(t.assignee) + '</td>' +
+      '<td class="mono">' + fmtDateThai(t.startDate) + '</td>' +
+      '<td class="mono">' + fmtDateThai(t.dueDate) + '</td>' +
+      '<td><div style="display:flex; align-items:center; gap:8px;"><div class="progress-track"><div class="progress-fill" style="width:' + t.progress + '%; background:' + s.color + '"></div></div><span class="mono" style="font-size:12px;">' + t.progress + '%</span></div></td>' +
+      '<td><span class="badge ' + s.cls + '">' + s.label + '</span></td>' +
+      '<td><button class="btn btn-danger btn-sm" data-action="delete-task" data-id="' + t.id + '" data-stop="1">ลบ</button></td>' +
+    '</tr>';
+  }).join('');
+
+  return head + '<div class="panel"><div class="table-wrap"><table class="tk">' +
+    '<thead><tr><th>งาน</th><th>ผู้รับผิดชอบ</th><th>เริ่ม</th><th>กำหนดส่ง</th><th>ความคืบหน้า</th><th>สถานะ</th><th></th></tr></thead>' +
+    '<tbody>' + rows + '</tbody>' +
+  '</table></div></div>';
+}
+
+/* ===================== Gantt ===================== */
+function renderGanttView(){
+  var head = '<div class="page-head">' +
+      '<div><div class="page-title">แผนภูมิแกนต์</div><div class="page-desc">ภาพรวมระยะเวลาดำเนินงานของทุกโปรเจกต์</div></div>' +
+    '</div>';
+
+  var filterOptions = '<option value="all">ทุกโปรเจกต์</option>' + projects.map(function(p){
+    return '<option value="' + p.id + '"' + (ganttFilterProject===p.id?' selected':'') + '>' + esc(p.name) + '</option>';
+  }).join('');
+  var filterBar = '<div class="filter-bar"><label style="font-size:12.5px; color:var(--ink-soft); font-weight:600;">กรองตามโปรเจกต์:</label>' +
+    '<select data-action="filter-gantt">' + filterOptions + '</select></div>';
+
+  var legend = '<div class="gantt-legend">' +
+    '<div class="legend-item"><span class="legend-dot" style="background:var(--slate)"></span>ยังไม่ได้ดำเนินการ</div>' +
+    '<div class="legend-item"><span class="legend-dot" style="background:var(--amber)"></span>กำลังดำเนินการ</div>' +
+    '<div class="legend-item"><span class="legend-dot" style="background:var(--teal)"></span>เสร็จสมบูรณ์</div>' +
+    '<div class="legend-item"><span class="legend-dot" style="background:var(--coral)"></span>เลยกำหนด</div>' +
+  '</div>';
+
+  var relevantProjects = ganttFilterProject === 'all' ? projects : projects.filter(function(p){ return p.id === ganttFilterProject; });
+  var relevantTasks = tasks.filter(function(t){
+    if(!t.startDate || !t.dueDate) return false;
+    if(ganttFilterProject === 'all') return true;
+    return t.projectId === ganttFilterProject;
+  });
+
+  if(relevantTasks.length === 0){
+    return head + filterBar + '<div class="empty-state">' +
+      '<div class="es-icon">&#128197;</div>' +
+      '<div class="es-title">ยังไม่มีข้อมูลสำหรับแสดงแผนภูมิ</div>' +
+      '<div class="es-sub">เพิ่มงานที่มีวันเริ่มต้นและวันกำหนดส่งในโปรเจกต์ก่อน</div>' +
+    '</div>';
+  }
+
+  var minD = null, maxD = null;
+  relevantTasks.forEach(function(t){
+    var s = parseDateStr(t.startDate), e = parseDateStr(t.dueDate);
+    if(!minD || s < minD) minD = s;
+    if(!maxD || e > maxD) maxD = e;
+  });
+  var rangeStart = addDays(minD, -2);
+  var rangeEnd = addDays(maxD, 3);
+  var totalDays = dayDiff(rangeStart, rangeEnd) + 1;
+  var dayWidth = 24;
+  var timelineWidth = totalDays * dayWidth;
+
+  // build week ticks
+  var ticksHtml = '';
+  var tickLabelsHtml = '';
+  for(var i=0;i<totalDays;i++){
+    var d = addDays(rangeStart, i);
+    if(i===0 || d.getDay()===1){
+      var x = i*dayWidth;
+      ticksHtml += '<div class="gantt-tick" style="left:' + x + 'px;"></div>';
+      tickLabelsHtml += '<div class="gantt-tick-label" style="left:' + x + 'px;">' + fmtDateShort(d) + '</div>';
+    }
+  }
+  var bgTicks = '';
+  for(var j=0;j<totalDays;j++){
+    var dj = addDays(rangeStart,j);
+    if(dj.getDay()===1) bgTicks += '<div class="gantt-bg-tick" style="left:' + (j*dayWidth) + 'px;"></div>';
+  }
+  var today = parseDateStr(todayStr());
+  var todayIdx = dayDiff(rangeStart, today);
+  var todayLineHtml = '';
+  if(todayIdx >= 0 && todayIdx < totalDays){
+    var tx = todayIdx*dayWidth;
+    todayLineHtml = '<div class="gantt-today-line" style="left:' + tx + 'px;"></div><div class="gantt-today-label" style="left:' + (tx+4) + 'px;">วันนี้</div>';
+  }
+
+  var projectsWithTasks = relevantProjects.filter(function(p){
+    return tasksOfProject(p.id).some(function(t){ return t.startDate && t.dueDate; });
+  });
+  var bodyHeight = projectsWithTasks.reduce(function(acc,p){
+    return acc + 30 + tasksOfProject(p.id).filter(function(t){ return t.startDate && t.dueDate; }).length*42;
+  },0);
+
+  var labelsHtml = '<div class="gantt-label-head">งาน / ผู้รับผิดชอบ</div>';
+  var rowsHtml = '<div class="gantt-body-rows" style="width:' + timelineWidth + 'px; min-height:' + bodyHeight + 'px;">' + bgTicks + todayLineHtml;
+
+  projectsWithTasks.forEach(function(p){
+    var pts = tasksOfProject(p.id).filter(function(t){ return t.startDate && t.dueDate; });
+    labelsHtml += '<div class="gantt-group-row">' + esc(p.name) + '</div>';
+    rowsHtml += '<div class="gantt-group-track"></div>';
+    pts.forEach(function(t){
+      var s = statusInfo(t);
+      var startIdx = dayDiff(rangeStart, parseDateStr(t.startDate));
+      var span = dayDiff(parseDateStr(t.startDate), parseDateStr(t.dueDate)) + 1;
+      var left = startIdx*dayWidth;
+      var width = Math.max(dayWidth-2, span*dayWidth - 3);
+      labelsHtml += '<div class="gantt-label-row"><div><div class="glr-title">' + esc(t.title) + '</div><div class="glr-sub">' + esc(t.assignee) + '</div></div></div>';
+      rowsHtml += '<div class="gantt-row-track">' +
+        '<div class="gantt-bar" data-action="open-task-detail" data-id="' + t.id + '" style="left:' + left + 'px; width:' + width + 'px; background:' + s.color + ';" title="' + esc(t.title) + ' (' + t.progress + '%)">' +
+          (width > 50 ? (t.progress + '%') : '') +
+        '</div>' +
+      '</div>';
+    });
+  });
+  rowsHtml += '</div>';
+
+  var gantt = '<div class="gantt-wrap">' +
+    '<div class="gantt-labels">' + labelsHtml + '</div>' +
+    '<div class="gantt-scroll"><div class="gantt-timeline" style="width:' + timelineWidth + 'px;">' +
+      '<div class="gantt-tick-row">' + ticksHtml + tickLabelsHtml + (todayIdx>=0 && todayIdx<totalDays ? '<div class="gantt-today-line" style="left:' + (todayIdx*dayWidth) + 'px;"></div>' : '') + '</div>' +
+      rowsHtml +
+    '</div></div>' +
+  '</div>';
+
+  return head + filterBar + legend + gantt;
+}
+
+/* ===================== Overview & Workload ===================== */
+function renderOverviewView(){
+  var head = '<div class="page-head">' +
+      '<div><div class="page-title">ภาพรวมและภาระงาน</div><div class="page-desc">สรุปสถานะงานทั้งหมดและภาระงานของแต่ละคน</div></div>' +
+    '</div>';
+
+  var totalProjects = projects.length;
+  var totalTasks = tasks.length;
+  var doneCount = tasks.filter(function(t){ return Number(t.progress)===100; }).length;
+  var overdueCount = tasks.filter(isOverdue).length;
+  var inProgressCount = tasks.filter(function(t){ var p=Number(t.progress); return p>0 && p<100 && !isOverdue(t); }).length;
+  var notStartedCount = tasks.filter(function(t){ return Number(t.progress)===0 && !isOverdue(t); }).length;
+  var completionRate = totalTasks ? Math.round(doneCount/totalTasks*100) : 0;
+
+  if(totalTasks === 0){
+    return head + '<div class="empty-state">' +
+      '<div class="es-icon">&#128202;</div>' +
+      '<div class="es-title">ยังไม่มีข้อมูลงาน</div>' +
+      '<div class="es-sub">เริ่มสร้างโปรเจกต์และเพิ่มงานเพื่อดูสรุปภาพรวมและภาระงานของทีม</div>' +
+    '</div>';
+  }
+
+  var kpis = '<div class="kpi-grid">' +
+    '<div class="panel kpi-card" style="--accent:var(--navy)"><div class="kpi-label">โปรเจกต์ทั้งหมด</div><div class="kpi-value">' + totalProjects + '</div><div class="kpi-foot">งานทั้งหมด ' + totalTasks + ' รายการ</div></div>' +
+    '<div class="panel kpi-card" style="--accent:var(--teal)"><div class="kpi-label">เสร็จสมบูรณ์</div><div class="kpi-value">' + completionRate + '%</div><div class="kpi-foot">' + doneCount + ' จาก ' + totalTasks + ' งาน</div></div>' +
+    '<div class="panel kpi-card" style="--accent:var(--amber)"><div class="kpi-label">กำลังดำเนินการ</div><div class="kpi-value">' + inProgressCount + '</div><div class="kpi-foot">ยังไม่ได้ดำเนินการ ' + notStartedCount + ' งาน</div></div>' +
+    '<div class="panel kpi-card" style="--accent:var(--coral)"><div class="kpi-label">เลยกำหนด</div><div class="kpi-value">' + overdueCount + '</div><div class="kpi-foot">ต้องติดตามเร่งด่วน</div></div>' +
+  '</div>';
+
+  var segs = [
+    {n:notStartedCount, c:'var(--slate)'},
+    {n:inProgressCount, c:'var(--amber)'},
+    {n:doneCount, c:'var(--teal)'},
+    {n:overdueCount, c:'var(--coral)'}
+  ];
+  var statusBar = '<div class="panel" style="padding:16px 18px; margin-bottom:20px;"><div class="section-label" style="margin-top:0;">สัดส่วนสถานะงานทั้งหมด</div>' +
+    '<div class="wl-bar-track" style="height:22px;">' + segs.map(function(s){
+      var pct = totalTasks ? (s.n/totalTasks*100) : 0;
+      return pct>0 ? '<div class="wl-bar-seg" style="width:' + pct + '%; background:' + s.c + '"></div>' : '';
+    }).join('') + '</div></div>';
+
+  // workload by assignee
+  var byAssignee = {};
+  tasks.forEach(function(t){
+    var key = (t.assignee || 'ไม่ระบุ').trim() || 'ไม่ระบุ';
+    if(!byAssignee[key]) byAssignee[key] = [];
+    byAssignee[key].push(t);
+  });
+  var assignees = Object.keys(byAssignee).sort(function(a,b){ return byAssignee[b].length - byAssignee[a].length; });
+  var maxCount = assignees.length ? byAssignee[assignees[0]].length : 1;
+
+  var wlRows = assignees.map(function(name){
+    var list = byAssignee[name];
+    var ns = list.filter(function(t){ return Number(t.progress)===0 && !isOverdue(t); }).length;
+    var ip = list.filter(function(t){ var p=Number(t.progress); return p>0 && p<100 && !isOverdue(t); }).length;
+    var dn = list.filter(function(t){ return Number(t.progress)===100; }).length;
+    var od = list.filter(isOverdue).length;
+    var total = list.length;
+    var widthPct = (total/maxCount*100);
+    return '<div class="wl-row">' +
+      '<div><div class="wl-name">' + esc(name) + '</div><div class="wl-name-sub">' + total + ' งาน</div></div>' +
+      '<div class="wl-bar-track" style="width:' + widthPct + '%;">' +
+        (ns ? '<div class="wl-bar-seg" style="width:' + (ns/total*100) + '%; background:var(--slate);"></div>' : '') +
+        (ip ? '<div class="wl-bar-seg" style="width:' + (ip/total*100) + '%; background:var(--amber);"></div>' : '') +
+        (dn ? '<div class="wl-bar-seg" style="width:' + (dn/total*100) + '%; background:var(--teal);"></div>' : '') +
+        (od ? '<div class="wl-bar-seg" style="width:' + (od/total*100) + '%; background:var(--coral);"></div>' : '') +
+      '</div>' +
+      '<div class="wl-stats">' +
+        '<span>ยังไม่เริ่ม <b>' + ns + '</b></span><span>กำลังทำ <b>' + ip + '</b></span><span>เสร็จ <b>' + dn + '</b></span>' + (od ? '<span style="color:var(--coral);">เลยกำหนด <b>' + od + '</b></span>' : '') +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  var workloadPanel = '<div class="panel" style="padding:18px 18px 6px 18px;"><div class="section-label" style="margin-top:0;">ภาระงานของแต่ละคน</div>' + wlRows + '</div>';
+
+  return head + kpis + statusBar + workloadPanel;
+}
+
+/* ===================== Modals ===================== */
+function openModal(html){
+  document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" data-action="close-modal-overlay"><div class="modal-panel">' + html + '</div></div>';
+}
+function closeModal(){
+  document.getElementById('modal-root').innerHTML = '';
+}
+
+function projectModalHtml(editId){
+  var p = editId ? projectById(editId) : null;
+  var color = p ? p.color : nextColor();
+  var swatches = PROJECT_COLORS.map(function(c){
+    return '<div class="swatch' + (c===color?' selected':'') + '" style="background:' + c + '" data-action="pick-color" data-color="' + c + '"></div>';
+  }).join('');
+  return '' +
+  '<div class="modal-head"><h3>' + (p ? 'แก้ไขโปรเจกต์' : 'เพิ่มโปรเจกต์ใหม่') + '</h3><button class="modal-close" data-action="close-modal">&times;</button></div>' +
+  '<div class="modal-body">' +
+    '<div class="field"><label>ชื่อโปรเจกต์ *</label><input type="text" id="f-project-name" value="' + (p?esc(p.name):'') + '" placeholder="เช่น Open Showcase Series / ลูกค้า ABC"></div>' +
+    '<div class="field"><label>รายละเอียด / ลูกค้า (ไม่บังคับ)</label><textarea id="f-project-desc" placeholder="รายละเอียดเพิ่มเติม">' + (p?esc(p.description):'') + '</textarea></div>' +
+    '<div class="field"><label>สีประจำโปรเจกต์</label><div class="swatches" id="f-project-swatches" data-color="' + color + '">' + swatches + '</div></div>' +
+    '<div class="field-error" id="f-project-error">กรุณากรอกชื่อโปรเจกต์</div>' +
+  '</div>' +
+  '<div class="modal-foot"><button class="btn btn-ghost" data-action="close-modal">ยกเลิก</button>' +
+  '<button class="btn btn-primary" data-action="save-project" data-id="' + (p?p.id:'') + '">' + (p?'บันทึกการแก้ไข':'เพิ่มโปรเจกต์') + '</button></div>';
+}
+
+function taskModalHtml(projectId, editId){
+  var t = editId ? taskById(editId) : null;
+  return '' +
+  '<div class="modal-head"><h3>' + (t ? 'แก้ไขงาน' : 'เพิ่มงานใหม่') + '</h3><button class="modal-close" data-action="close-modal">&times;</button></div>' +
+  '<div class="modal-body">' +
+    '<div class="field"><label>ชื่องาน *</label><input type="text" id="f-task-title" value="' + (t?esc(t.title):'') + '" placeholder="เช่น ตรวจสอบ Incoming Material รุ่น ON2-08VP"></div>' +
+    '<div class="field"><label>ผู้รับผิดชอบ *</label><input type="text" id="f-task-assignee" value="' + (t?esc(t.assignee):'') + '" placeholder="ชื่อผู้รับผิดชอบ"></div>' +
+    '<div class="field-row">' +
+      '<div class="field"><label>วันเริ่มต้น *</label><input type="date" id="f-task-start" value="' + (t?t.startDate:'') + '"></div>' +
+      '<div class="field"><label>วันกำหนดส่ง *</label><input type="date" id="f-task-due" value="' + (t?t.dueDate:'') + '"></div>' +
+    '</div>' +
+    '<div class="field"><label>ความคืบหน้า</label><select id="f-task-progress">' +
+      [0,25,50,75,100].map(function(v){
+        var labelMap = {0:'0% — ยังไม่ได้ดำเนินการ',25:'25% — กำลังดำเนินการ',50:'50% — กำลังดำเนินการ',75:'75% — กำลังดำเนินการ',100:'100% — ดำเนินการเรียบร้อย'};
+        var sel = (t ? Number(t.progress) : 0) === v ? ' selected' : '';
+        return '<option value="' + v + '"' + sel + '>' + labelMap[v] + '</option>';
+      }).join('') +
+    '</select></div>' +
+    '<div class="field-error" id="f-task-error"></div>' +
+  '</div>' +
+  '<div class="modal-foot"><button class="btn btn-ghost" data-action="close-modal">ยกเลิก</button>' +
+  '<button class="btn btn-primary" data-action="save-task" data-pid="' + projectId + '" data-id="' + (t?t.id:'') + '">' + (t?'บันทึกการแก้ไข':'เพิ่มงาน') + '</button></div>';
+}
+
+function taskDetailModalHtml(taskId){
+  var t = taskById(taskId);
+  if(!t) return '';
+  var p = projectById(t.projectId);
+  var s = statusInfo(t);
+  var notesHtml = (t.notes && t.notes.length) ? t.notes.slice().reverse().map(function(n){
+    return '<div class="note-item"><div class="note-date">' + fmtTimestamp(n.date) + '</div><div class="note-text">' + esc(n.text) + '</div></div>';
+  }).join('') : '<div style="font-size:12.5px; color:var(--ink-faint); padding:8px 0;">ยังไม่มีบันทึกการติดตาม</div>';
+
+  return '' +
+  '<div class="modal-head"><h3>' + esc(t.title) + '</h3><button class="modal-close" data-action="close-modal">&times;</button></div>' +
+  '<div class="modal-body">' +
+    '<div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;"><span class="badge ' + s.cls + '">' + s.label + '</span>' +
+    (p ? '<span style="font-size:12px; color:var(--ink-soft);">โปรเจกต์: ' + esc(p.name) + '</span>' : '') + '</div>' +
+    '<div class="task-detail-meta">' +
+      '<div class="tdm-item"><div class="tdm-label">ผู้รับผิดชอบ</div><div class="tdm-value">' + esc(t.assignee) + '</div></div>' +
+      '<div class="tdm-item"><div class="tdm-label">ความคืบหน้า</div><div class="tdm-value">' + t.progress + '%</div></div>' +
+      '<div class="tdm-item"><div class="tdm-label">วันเริ่มต้น</div><div class="tdm-value">' + fmtDateThai(t.startDate) + '</div></div>' +
+      '<div class="tdm-item"><div class="tdm-label">วันกำหนดส่ง</div><div class="tdm-value">' + fmtDateThai(t.dueDate) + '</div></div>' +
+    '</div>' +
+    '<div class="section-label">อัปเดตความคืบหน้า</div>' +
+    '<select id="f-detail-progress" style="width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:8px; font-size:13.5px; font-family:IBM Plex Sans;">' +
+      [0,25,50,75,100].map(function(v){
+        var labelMap = {0:'0% — ยังไม่ได้ดำเนินการ',25:'25% — กำลังดำเนินการ',50:'50% — กำลังดำเนินการ',75:'75% — กำลังดำเนินการ',100:'100% — ดำเนินการเรียบร้อย'};
+        var sel = Number(t.progress) === v ? ' selected' : '';
+        return '<option value="' + v + '"' + sel + '>' + labelMap[v] + '</option>';
+      }).join('') +
+    '</select>' +
+    '<div style="margin-top:8px; text-align:right;"><button class="btn btn-primary btn-sm" data-action="update-progress" data-id="' + t.id + '">บันทึกความคืบหน้า</button></div>' +
+
+    '<div class="section-label">บันทึกการติดตามงาน</div>' +
+    '<div class="notes-list">' + notesHtml + '</div>' +
+    '<div class="add-note-row">' +
+      '<textarea id="f-new-note" placeholder="พิมพ์บันทึกการติดตาม เช่น ผลการตรวจสอบ / ปัญหาที่พบ / แผนถัดไป"></textarea>' +
+      '<button class="btn btn-primary btn-sm" data-action="add-note" data-id="' + t.id + '">เพิ่มบันทึก</button>' +
+    '</div>' +
+  '</div>' +
+  '<div class="modal-foot">' +
+    '<button class="btn btn-danger" data-action="delete-task" data-id="' + t.id + '">ลบงานนี้</button>' +
+    '<button class="btn btn-ghost" data-action="open-edit-task" data-id="' + t.id + '">แก้ไขรายละเอียด</button>' +
+    '<button class="btn btn-ghost" data-action="close-modal">ปิด</button>' +
+  '</div>';
+}
+
+/* ===================== Actions ===================== */
+function handleSaveProject(editId){
+  var name = document.getElementById('f-project-name').value.trim();
+  var desc = document.getElementById('f-project-desc').value.trim();
+  var color = document.getElementById('f-project-swatches').getAttribute('data-color');
+  var errEl = document.getElementById('f-project-error');
+  if(!name){ errEl.classList.add('show'); return; }
+  errEl.classList.remove('show');
+
+  var proj;
+  if(editId){
+    proj = projectById(editId);
+    if(proj){ proj.name = name; proj.description = desc; proj.color = color; }
+  } else {
+    proj = { id: uid('proj'), name: name, description: desc, color: color, createdAt: Date.now() };
+    projects.push(proj);
+  }
+  pushProject(proj);
+  closeModal();
+  render();
+}
+
+function handleSaveTask(projectId, editId){
+  var title = document.getElementById('f-task-title').value.trim();
+  var assignee = document.getElementById('f-task-assignee').value.trim();
+  var start = document.getElementById('f-task-start').value;
+  var due = document.getElementById('f-task-due').value;
+  var progress = document.getElementById('f-task-progress').value;
+  var errEl = document.getElementById('f-task-error');
+
+  if(!title || !assignee || !start || !due){
+    errEl.textContent = 'กรุณากรอกข้อมูลให้ครบ: ชื่องาน ผู้รับผิดชอบ วันเริ่มต้น และวันกำหนดส่ง';
+    errEl.classList.add('show');
+    return;
+  }
+  if(due < start){
+    errEl.textContent = 'วันกำหนดส่งต้องไม่อยู่ก่อนวันเริ่มต้น';
+    errEl.classList.add('show');
+    return;
+  }
+  errEl.classList.remove('show');
+
+  var task;
+  if(editId){
+    task = taskById(editId);
+    if(task){ task.title = title; task.assignee = assignee; task.startDate = start; task.dueDate = due; task.progress = Number(progress); task.updatedAt = Date.now(); }
+  } else {
+    task = { id: uid('task'), projectId: projectId, title: title, assignee: assignee, startDate: start, dueDate: due, progress: Number(progress), notes: [], createdAt: Date.now() };
+    tasks.push(task);
+  }
+  pushTask(task);
+  closeModal();
+  render();
+}
+
+function handleUpdateProgress(taskId){
+  var val = document.getElementById('f-detail-progress').value;
+  var t = taskById(taskId);
+  if(t){ t.progress = Number(val); t.updatedAt = Date.now(); pushTask(t); }
+  closeModal();
+  render();
+}
+
+function handleAddNote(taskId){
+  var ta = document.getElementById('f-new-note');
+  var text = ta.value.trim();
+  if(!text) return;
+  var t = taskById(taskId);
+  if(t){
+    if(!t.notes) t.notes = [];
+    t.notes.push({ id: uid('note'), date: Date.now(), text: text });
+    pushTask(t);
+  }
+  openModal(taskDetailModalHtml(taskId));
+}
+
+function handleDeleteProject(projectId){
+  if(!confirm('ลบโปรเจกต์นี้และงานทั้งหมดในโปรเจกต์? การลบนี้ไม่สามารถย้อนกลับได้')) return;
+  var orphanTasks = tasks.filter(function(t){ return t.projectId === projectId; });
+  projects = projects.filter(function(p){ return p.id !== projectId; });
+  tasks = tasks.filter(function(t){ return t.projectId !== projectId; });
+  removeProject(projectId);
+  orphanTasks.forEach(function(t){ removeTask(t.id); });
+  if(currentProjectId === projectId) currentProjectId = null;
+  render();
+}
+
+function handleDeleteTask(taskId){
+  if(!confirm('ลบงานนี้? การลบนี้ไม่สามารถย้อนกลับได้')) return;
+  tasks = tasks.filter(function(t){ return t.id !== taskId; });
+  removeTask(taskId);
+  closeModal();
+  render();
+}
+
+/* ===================== Event delegation ===================== */
+document.addEventListener('click', function(e){
+  var overlay = e.target.classList && e.target.classList.contains('modal-overlay');
+  if(overlay){ closeModal(); return; }
+
+  var el = e.target.closest('[data-action]');
+  if(!el) return;
+  var action = el.getAttribute('data-action');
+  var id = el.getAttribute('data-id');
+
+  switch(action){
+    case 'goto-view':
+      currentView = el.getAttribute('data-view');
+      if(currentView !== 'projects') currentProjectId = null;
+      render();
+      break;
+    case 'back-to-projects':
+      currentProjectId = null;
+      render();
+      break;
+    case 'open-project':
+      currentProjectId = id;
+      render();
+      break;
+    case 'open-project-modal':
+      openModal(projectModalHtml(null));
+      break;
+    case 'edit-project':
+      openModal(projectModalHtml(id));
+      break;
+    case 'delete-project':
+      handleDeleteProject(id);
+      break;
+    case 'pick-color':
+      var wrap = el.closest('.swatches');
+      wrap.setAttribute('data-color', el.getAttribute('data-color'));
+      Array.prototype.forEach.call(wrap.querySelectorAll('.swatch'), function(sw){ sw.classList.remove('selected'); });
+      el.classList.add('selected');
+      break;
+    case 'save-project':
+      handleSaveProject(id || null);
+      break;
+    case 'open-task-modal':
+      openModal(taskModalHtml(id, null));
+      break;
+    case 'open-edit-task':
+      var tk = taskById(id);
+      if(tk) openModal(taskModalHtml(tk.projectId, id));
+      break;
+    case 'save-task':
+      handleSaveTask(el.getAttribute('data-pid'), id || null);
+      break;
+    case 'delete-task':
+      handleDeleteTask(id);
+      break;
+    case 'open-task-detail':
+      currentTaskId = id;
+      openModal(taskDetailModalHtml(id));
+      break;
+    case 'update-progress':
+      handleUpdateProgress(id);
+      break;
+    case 'add-note':
+      handleAddNote(id);
+      break;
+    case 'close-modal':
+      closeModal();
+      break;
+    default:
+      break;
+  }
+}, false);
+
+document.addEventListener('change', function(e){
+  if(e.target && e.target.getAttribute('data-action') === 'filter-gantt'){
+    ganttFilterProject = e.target.value;
+    render();
+  }
+}, false);
+
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape') closeModal();
+}, false);
+
+/* ===================== Init ===================== */
+render();
+loadAll();
+
+})();
+</script>
+</body>
+</html>
