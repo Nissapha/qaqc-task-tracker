@@ -264,7 +264,6 @@ table.tk tr.task-row:hover{background:#FAFCFD;}
 .gantt-bar-outer{position:absolute; top:8px; height:18px; border-radius:5px; overflow:hidden; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.12); background:var(--slate-soft); z-index:2;}
 .gantt-bar-outer.is-group{top:4px; height:18px; border:none; box-shadow:0 1px 2px rgba(0,0,0,.15);}
 .gantt-bar-fill{position:absolute; top:0; left:0; bottom:0;}
-.gantt-bar-label{position:absolute; top:0; bottom:0; display:flex; align-items:center; font-size:10.5px; font-weight:700; white-space:nowrap; padding:0 6px; z-index:3; pointer-events:none;}
 .gantt-overrun{position:absolute; top:8px; height:18px; border-radius:0 5px 5px 0; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; color:#fff; cursor:pointer; z-index:2;
   background:repeating-linear-gradient(45deg, var(--coral) 0 5px, #B8412E 5px 10px); box-shadow:0 1px 2px rgba(0,0,0,.12);}
 .gantt-overrun.is-group{top:4px; height:18px;}
@@ -294,12 +293,14 @@ table.tk tr.task-row:hover{background:#FAFCFD;}
 .gantt-toolbar-row input[type=date]{padding:7px 9px; border:1px solid var(--line); border-radius:8px; font-size:12.5px; font-family:'IBM Plex Sans'; background:var(--panel);}
 
 /* ---------- Workload ---------- */
-.wl-row{display:grid; grid-template-columns:160px 1fr 200px; gap:14px; align-items:center; padding:12px 0; border-bottom:1px solid var(--line-soft);}
+.wl-row{display:grid; grid-template-columns:52px 150px 1fr 200px; gap:14px; align-items:center; padding:12px 0; border-bottom:1px solid var(--line-soft);}
 .wl-row:last-child{border-bottom:none;}
-.wl-name{font-weight:700; font-size:13.5px; color:var(--ink);}
+.wl-ring{display:flex; align-items:center; justify-content:center;}
+.wl-name{font-weight:700; font-size:13.5px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .wl-name-sub{font-size:11px; color:var(--ink-faint); font-family:'IBM Plex Mono';}
-.wl-bar-track{height:18px; border-radius:6px; background:var(--slate-soft); overflow:hidden; display:flex;}
-.wl-bar-seg{height:100%;}
+.wl-bar-track{height:20px; border-radius:6px; background:var(--slate-soft); overflow:hidden; display:flex;}
+.wl-bar-seg{height:100%; display:flex; align-items:center; justify-content:center; overflow:hidden;}
+.wl-seg-label{font-size:10.5px; font-weight:700; color:#fff; font-family:'IBM Plex Mono'; white-space:nowrap;}
 .wl-stats{display:flex; gap:10px; font-size:11.5px; color:var(--ink-soft); justify-content:flex-end; flex-wrap:wrap;}
 .wl-stats b{font-family:'IBM Plex Mono'; color:var(--ink);}
 
@@ -498,6 +499,38 @@ function fillColorFor(progress){
   if(Number(progress) === 0) return 'var(--slate)';
   return 'var(--amber)';
 }
+function buildDonutSvg(segments, opts){
+  opts = opts || {};
+  var size = opts.size || 140;
+  var thickness = opts.thickness || 18;
+  var r = (size/2) - (thickness/2);
+  var cx = size/2, cy = size/2;
+  var circumference = 2 * Math.PI * r;
+  var total = segments.reduce(function(s,seg){ return s + (Number(seg.value)||0); }, 0);
+  var circles = '';
+  if(total <= 0){
+    circles = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="var(--slate-soft)" stroke-width="' + thickness + '"/>';
+  } else {
+    var offset = 0;
+    segments.forEach(function(seg){
+      var v = Number(seg.value) || 0;
+      if(v <= 0) return;
+      var frac = v / total;
+      var len = frac * circumference;
+      var gap = Math.max(0, circumference - len);
+      circles += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + seg.color + '" stroke-width="' + thickness +
+        '" stroke-dasharray="' + len + ' ' + gap + '" stroke-dashoffset="' + (-offset) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')"/>';
+      offset += len;
+    });
+  }
+  var centerLabel = opts.centerLabel || '';
+  var centerSub = opts.centerSub || '';
+  var labelSize = opts.labelSize || Math.round(size*0.16);
+  return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '" style="flex-shrink:0;">' + circles +
+    (centerLabel ? '<text x="' + cx + '" y="' + (centerSub?cy-3:cy+5) + '" text-anchor="middle" font-family="IBM Plex Mono" font-size="' + labelSize + '" font-weight="700" fill="var(--ink)">' + centerLabel + '</text>' : '') +
+    (centerSub ? '<text x="' + cx + '" y="' + (cy+15) + '" text-anchor="middle" font-family="IBM Plex Sans" font-size="' + Math.round(size*0.078) + '" fill="var(--ink-faint)">' + centerSub + '</text>' : '') +
+  '</svg>';
+}
 function buildBarSegments(item, rangeStart, rangeEnd, totalDays){
   var ts = parseDateStr(item.startDate), te = parseDateStr(item.dueDate);
   var today = parseDateStr(todayStr());
@@ -540,11 +573,8 @@ function renderBarHtml(item, seg, opts){
   var trackBg = isGroup && opts.groupColor ? ('background:var(--slate-soft); background:color-mix(in srgb, ' + opts.groupColor + ' 16%, white);') : '';
   var html = '';
   if(seg.hasPlan){
-    var labelInside = fillPct >= 30;
-    var label = seg.planWidthPx > 7 ? (item.progress + '%') : '';
     html += '<div class="gantt-bar-outer' + (isGroup?' is-group':'') + '" style="left:' + seg.planLeft + '%; width:' + seg.planWidthPx + '%; ' + trackBg + '" data-action="' + (opts.dataAction||'') + '" data-id="' + (opts.dataId||'') + '" title="' + esc(opts.tooltip||'') + '">' +
       '<div class="gantt-bar-fill" style="width:' + fillPct + '%; background:' + fillColor + ';"></div>' +
-      (label ? '<div class="gantt-bar-label" style="left:' + (labelInside?6:4) + 'px; color:' + (labelInside?'#fff':'var(--ink)') + ';">' + label + '</div>' : '') +
     '</div>';
   }
   if(seg.hasOverrun){
@@ -905,7 +935,7 @@ function renderGanttSection(mode){
       trackInner += '<div class="gantt-date-flank flank-start" style="left:0%; width:' + startLeftWidth + '%;">' + fmtDateShort(parseDateStr(t.startDate)) + '</div>';
       var endLeft = seg.endOfBarPx;
       trackInner += '<div class="gantt-date-flank flank-end' + (seg.overdue?' flank-overdue':'') + '" style="left:' + endLeft + '%; width:' + (100-endLeft) + '%;">' +
-        fmtDateShort(parseDateStr(t.dueDate)) + (seg.overdue ? ' (เกิน ' + seg.overdueDays + ' วัน)' : '') + '</div>';
+        t.progress + '% &middot; ' + fmtDateShort(parseDateStr(t.dueDate)) + (seg.overdue ? ' (เกิน ' + seg.overdueDays + ' วัน)' : '') + '</div>';
     }
     rowsHtml += '<div class="gantt-row-track">' + trackInner + '</div>';
   }
@@ -933,7 +963,7 @@ function renderGanttSection(mode){
           groupTrackInner += '<div class="gantt-date-flank is-group flank-start" style="left:0%; width:' + gStartWidth + '%;">' + fmtDateShort(parseDateStr(agg.startDate)) + '</div>';
           var gEndLeft = gseg.endOfBarPx;
           groupTrackInner += '<div class="gantt-date-flank is-group flank-end' + (gseg.overdue?' flank-overdue':'') + '" style="left:' + gEndLeft + '%; width:' + (100-gEndLeft) + '%;">' +
-            fmtDateShort(parseDateStr(agg.dueDate)) + (gseg.overdue ? ' (เกิน ' + gseg.overdueDays + ' วัน)' : '') + '</div>';
+            agg.progress + '% &middot; ' + fmtDateShort(parseDateStr(agg.dueDate)) + (gseg.overdue ? ' (เกิน ' + gseg.overdueDays + ' วัน)' : '') + '</div>';
         }
       }
       rowsHtml += '<div class="gantt-group-track" data-action="toggle-gantt-group" data-id="' + p.id + '">' + groupTrackInner + '</div>';
@@ -986,16 +1016,29 @@ function renderOverviewView(){
   '</div>';
 
   var segs = [
-    {n:notStartedCount, c:'var(--slate)'},
-    {n:inProgressCount, c:'var(--amber)'},
-    {n:doneCount, c:'var(--teal)'},
-    {n:overdueCount, c:'var(--coral)'}
+    {key:'ns', n:notStartedCount, c:'var(--slate)', label:'ยังไม่ได้เริ่ม'},
+    {key:'ip', n:inProgressCount, c:'var(--amber)', label:'กำลังดำเนินการ'},
+    {key:'dn', n:doneCount, c:'var(--teal)', label:'เสร็จสมบูรณ์'},
+    {key:'od', n:overdueCount, c:'var(--coral)', label:'เลยกำหนด'}
   ];
-  var statusBar = '<div class="panel" style="padding:16px 18px; margin-bottom:20px;"><div class="section-label" style="margin-top:0;">สัดส่วนสถานะงานทั้งหมด</div>' +
-    '<div class="wl-bar-track" style="height:22px;">' + segs.map(function(s){
-      var pct = totalTasks ? (s.n/totalTasks*100) : 0;
-      return pct>0 ? '<div class="wl-bar-seg" style="width:' + pct + '%; background:' + s.c + '"></div>' : '';
-    }).join('') + '</div></div>';
+  var donutSegs = segs.map(function(s){ return {value:s.n, color:s.c}; });
+  var donutSvg = buildDonutSvg(donutSegs, {size:152, thickness:22, centerLabel:completionRate+'%', centerSub:'เสร็จสมบูรณ์'});
+  var legendRows = segs.map(function(s){
+    var pct = totalTasks ? Math.round(s.n/totalTasks*100) : 0;
+    return '<div style="display:flex; align-items:center; gap:9px; padding:6px 0;">' +
+      '<span style="width:11px; height:11px; border-radius:3px; background:' + s.c + '; flex-shrink:0;"></span>' +
+      '<span style="flex:1; font-size:13px; color:var(--ink);">' + s.label + '</span>' +
+      '<span class="mono" style="font-size:13px; font-weight:700; color:var(--ink);">' + s.n + '</span>' +
+      '<span class="mono" style="font-size:11.5px; color:var(--ink-faint); min-width:36px; text-align:right;">' + pct + '%</span>' +
+    '</div>';
+  }).join('');
+  var statusDonutPanel = '<div class="panel" style="padding:18px 20px; margin-bottom:20px; display:flex; gap:28px; align-items:center; flex-wrap:wrap;">' +
+    donutSvg +
+    '<div style="flex:1; min-width:200px;">' +
+      '<div class="section-label" style="margin-top:0;">สัดส่วนสถานะงานทั้งหมด &middot; ' + totalTasks + ' งาน</div>' +
+      legendRows +
+    '</div>' +
+  '</div>';
 
   // workload by assignee
   var byAssignee = {};
@@ -1007,6 +1050,8 @@ function renderOverviewView(){
   var assignees = Object.keys(byAssignee).sort(function(a,b){ return byAssignee[b].length - byAssignee[a].length; });
   var maxCount = assignees.length ? byAssignee[assignees[0]].length : 1;
 
+  function segLabel(pctOfBar, text){ return pctOfBar >= 13 ? ('<span class="wl-seg-label">' + text + '</span>') : ''; }
+
   var wlRows = assignees.map(function(name){
     var list = byAssignee[name];
     var ns = list.filter(function(t){ return Number(t.progress)===0 && !isOverdue(t); }).length;
@@ -1015,13 +1060,16 @@ function renderOverviewView(){
     var od = list.filter(isOverdue).length;
     var total = list.length;
     var widthPct = (total/maxCount*100);
+    var donePct = total ? Math.round(dn/total*100) : 0;
+    var ring = buildDonutSvg([{value:dn,color:'var(--teal)'},{value:total-dn,color:'var(--slate-soft)'}], {size:46, thickness:6, centerLabel:donePct+'%', labelSize:11});
     return '<div class="wl-row">' +
+      '<div class="wl-ring">' + ring + '</div>' +
       '<div><div class="wl-name">' + esc(name) + '</div><div class="wl-name-sub">' + total + ' งาน</div></div>' +
       '<div class="wl-bar-track" style="width:' + widthPct + '%;">' +
-        (ns ? '<div class="wl-bar-seg" style="width:' + (ns/total*100) + '%; background:var(--slate);"></div>' : '') +
-        (ip ? '<div class="wl-bar-seg" style="width:' + (ip/total*100) + '%; background:var(--amber);"></div>' : '') +
-        (dn ? '<div class="wl-bar-seg" style="width:' + (dn/total*100) + '%; background:var(--teal);"></div>' : '') +
-        (od ? '<div class="wl-bar-seg" style="width:' + (od/total*100) + '%; background:var(--coral);"></div>' : '') +
+        (ns ? '<div class="wl-bar-seg" style="width:' + (ns/total*100) + '%; background:var(--slate);">' + segLabel(ns/total*100, ns) + '</div>' : '') +
+        (ip ? '<div class="wl-bar-seg" style="width:' + (ip/total*100) + '%; background:var(--amber);">' + segLabel(ip/total*100, ip) + '</div>' : '') +
+        (dn ? '<div class="wl-bar-seg" style="width:' + (dn/total*100) + '%; background:var(--teal);">' + segLabel(dn/total*100, dn) + '</div>' : '') +
+        (od ? '<div class="wl-bar-seg" style="width:' + (od/total*100) + '%; background:var(--coral);">' + segLabel(od/total*100, od) + '</div>' : '') +
       '</div>' +
       '<div class="wl-stats">' +
         '<span>ยังไม่เริ่ม <b>' + ns + '</b></span><span>กำลังทำ <b>' + ip + '</b></span><span>เสร็จ <b>' + dn + '</b></span>' + (od ? '<span style="color:var(--coral);">เลยกำหนด <b>' + od + '</b></span>' : '') +
@@ -1031,7 +1079,7 @@ function renderOverviewView(){
 
   var workloadPanel = '<div class="panel" style="padding:18px 18px 6px 18px;"><div class="section-label" style="margin-top:0;">ภาระงานของแต่ละคน</div>' + wlRows + '</div>';
 
-  return head + kpis + statusBar + workloadPanel;
+  return head + kpis + statusDonutPanel + workloadPanel;
 }
 
 /* ===================== Modals ===================== */
