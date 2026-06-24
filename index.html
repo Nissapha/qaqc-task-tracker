@@ -197,9 +197,25 @@ table.tk tr.task-row:hover{background:#FAFCFD;}
 .field-row{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
 .field-error{color:var(--coral); font-size:12px; margin-top:6px; display:none;}
 .field-error.show{display:block;}
-.swatches{display:flex; gap:8px;}
-.swatch{width:26px; height:26px; border-radius:7px; cursor:pointer; border:2px solid transparent;}
-.swatch.selected{border-color:var(--ink);}
+.swatches{display:flex; gap:8px; flex-wrap:wrap;}
+.swatch{width:28px; height:28px; border-radius:50%; cursor:pointer; border:2px solid transparent; box-shadow:0 1px 2px rgba(0,0,0,0.12);}
+.swatch.selected{border-color:var(--ink); box-shadow:0 0 0 2px var(--panel) inset, 0 0 0 2px var(--ink);}
+
+.category-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+@media (max-width:480px){.category-grid{grid-template-columns:1fr;}}
+.category-card{display:flex; gap:10px; align-items:flex-start; padding:11px 12px; border:1.5px solid var(--line); border-radius:10px; cursor:pointer; background:var(--panel); transition:border-color .12s ease, background .12s ease;}
+.category-card:hover{border-color:var(--navy);}
+.category-card.selected{border-color:var(--navy); background:var(--navy-soft);}
+.cc-icon{width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0;}
+.cc-body{flex:1; min-width:0;}
+.cc-title{font-weight:700; font-size:12.5px; color:var(--ink); display:flex; align-items:center; gap:6px; line-height:1.3;}
+.cc-check{color:var(--navy); font-weight:700; font-size:12px;}
+.cc-desc{font-size:11px; color:var(--ink-soft); margin-top:2px; line-height:1.35;}
+
+.priority-grid{display:flex; gap:10px;}
+.priority-btn{flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:10px; border:1.5px solid var(--line); border-radius:10px; cursor:pointer; font-weight:700; font-size:12.5px; background:var(--panel); color:var(--ink-soft); letter-spacing:0.03em;}
+.priority-btn:hover{border-color:var(--ink-faint);}
+.priority-btn.selected{border-color:currentColor;}
 
 /* ---------- Task detail modal ---------- */
 .task-detail-meta{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px; font-size:13px;}
@@ -341,20 +357,21 @@ var dataReady = false;
 var firebaseError = null;
 var projectsLoaded = false, tasksLoaded = false;
 
-var PROJECT_COLORS = ['#163A53','#2A9D8F','#E8954B','#D9614F','#6A6FA8','#3D8FA3'];
+var PROJECT_COLORS = ['#4F46E5','#0284C7','#16A34A','#D97706','#DC2626','#9333EA','#2563EB','#EA580C','#64748B','#DB2777','#0D9488','#92400E'];
 
 var CATEGORY_GROUPS = [
-  {id:'incoming', label:'ตรวจสอบคุณภาพวัตถุดิบ', sub:'Incoming Inspection', desc:'ตรวจสอบคุณภาพวัตถุดิบและส่วนประกอบก่อนเข้าสู่กระบวนการผลิต'},
-  {id:'inprocess', label:'ควบคุมคุณภาพในกระบวนการผลิต', sub:'In-Process QC', desc:'ตรวจสอบและควบคุมคุณภาพระหว่างขั้นตอนการผลิต'},
-  {id:'final', label:'ตรวจสอบคุณภาพผลิตภัณฑ์สำเร็จ', sub:'Final Inspection', desc:'ตรวจสอบคุณภาพสินค้าสำเร็จก่อนส่งมอบลูกค้า'},
-  {id:'complaint', label:'ข้อร้องเรียนลูกค้า & NCR', sub:'Complaint / NCR', desc:'ติดตามและแก้ไขปัญหาคุณภาพจากลูกค้า หรือสินค้าที่ไม่เป็นไปตามข้อกำหนด'},
-  {id:'qms', label:'ระบบบริหารคุณภาพ & มาตรฐาน', sub:'QMS / Standards', desc:'งานด้านระบบบริหารคุณภาพ เอกสาร และมาตรฐาน เช่น ISO'},
-  {id:'other', label:'อื่นๆ', sub:'Other', desc:'ระบุรายละเอียดกลุ่มงานเอง'}
+  {id:'quality_improvement', label:'Quality Improvement', desc:'โครงการปรับปรุงคุณภาพสินค้าและกระบวนการ', icon:'&#8599;', iconBg:'#EEF2FF', iconColor:'#4F46E5'},
+  {id:'qa_system', label:'QA System', desc:'โครงการพัฒนาระบบคุณภาพและมาตรฐาน', icon:'&#128421;', iconBg:'#E0F2FE', iconColor:'#0284C7'},
+  {id:'supplier_quality', label:'Supplier Quality Dev.', desc:'โครงการพัฒนาคุณภาพ Supplier', icon:'&#128666;', iconBg:'#DCFCE7', iconColor:'#16A34A'},
+  {id:'customer_quality', label:'Customer Quality', desc:'โครงการจัดการปัญหาคุณภาพลูกค้า', icon:'&#128101;', iconBg:'#FEF3C7', iconColor:'#D97706'},
+  {id:'inspection_measurement', label:'Inspection &amp; Measurement', desc:'โครงการพัฒนาระบบตรวจสอบและเครื่องมือวัด', icon:'&#128209;', iconBg:'#DBEAFE', iconColor:'#2563EB'},
+  {id:'new_product_validation', label:'New Product Validation', desc:'โครงการรองรับสินค้าใหม่', icon:'&#129514;', iconBg:'#F3E8FF', iconColor:'#9333EA'},
+  {id:'other', label:'อื่นๆ', desc:'งานอื่นๆ', icon:'&#128193;', iconBg:'#F1F5F9', iconColor:'#64748B'}
 ];
 var PRIORITY_LEVELS = [
-  {id:'high', label:'สูง', cls:'badge-coral'},
-  {id:'medium', label:'ปานกลาง', cls:'badge-amber'},
-  {id:'low', label:'ต่ำ', cls:'badge-slate'}
+  {id:'high', label:'สูง', cls:'badge-coral', flagColor:'#DC2626', tint:'var(--coral-soft)'},
+  {id:'medium', label:'ปานกลาง', cls:'badge-amber', flagColor:'#D97706', tint:'var(--amber-soft)'},
+  {id:'low', label:'ต่ำ', cls:'badge-slate', flagColor:'#16A34A', tint:'var(--teal-soft)'}
 ];
 function categoryById(id){ return CATEGORY_GROUPS.find(function(c){ return c.id === id; }) || null; }
 function priorityById(id){ return PRIORITY_LEVELS.find(function(p){ return p.id === id; }) || PRIORITY_LEVELS[1]; }
@@ -1032,33 +1049,44 @@ function projectModalHtml(editId){
     return '<div class="swatch' + (c===color?' selected':'') + '" style="background:' + c + '" data-action="pick-color" data-color="' + c + '"></div>';
   }).join('');
   var selectedCat = p && p.category ? p.category : CATEGORY_GROUPS[0].id;
-  var catOptions = CATEGORY_GROUPS.map(function(c){
-    return '<option value="' + c.id + '"' + (c.id===selectedCat?' selected':'') + '>' + esc(c.label) + ' (' + esc(c.sub) + ')</option>';
+  var catCards = CATEGORY_GROUPS.map(function(c){
+    var sel = c.id === selectedCat;
+    return '<div class="category-card' + (sel?' selected':'') + '" data-action="select-category" data-cat-id="' + c.id + '" title="' + esc(c.desc) + '">' +
+      '<div class="cc-icon" style="background:' + c.iconBg + '; color:' + c.iconColor + ';">' + c.icon + '</div>' +
+      '<div class="cc-body">' +
+        '<div class="cc-title">' + c.label + (sel ? ' <span class="cc-check">&#10003;</span>' : '') + '</div>' +
+        '<div class="cc-desc">' + esc(c.desc) + '</div>' +
+      '</div>' +
+    '</div>';
   }).join('');
   var selectedPriority = p && p.priority ? p.priority : 'medium';
-  var prioOptions = PRIORITY_LEVELS.map(function(pr){
-    return '<option value="' + pr.id + '"' + (pr.id===selectedPriority?' selected':'') + '>' + esc(pr.label) + '</option>';
+  var prioBtns = PRIORITY_LEVELS.map(function(pr){
+    var sel = pr.id === selectedPriority;
+    return '<div class="priority-btn' + (sel?' selected':'') + '" data-action="select-priority" data-pid="' + pr.id + '" style="color:' + pr.flagColor + '; ' + (sel ? ('background:'+pr.tint+';') : '') + '">' +
+      '&#128681; ' + pr.label.toUpperCase() +
+    '</div>';
   }).join('');
-  var catDesc = categoryById(selectedCat) ? categoryById(selectedCat).desc : '';
 
   return '' +
   '<div class="modal-head"><h3>' + (p ? 'แก้ไขโปรเจกต์' : 'เพิ่มโปรเจกต์ใหม่') + '</h3><button class="modal-close" data-action="close-modal">&times;</button></div>' +
   '<div class="modal-body">' +
-    '<div class="field"><label>ชื่อโปรเจกต์ *</label><input type="text" id="f-project-name" value="' + (p?esc(p.name):'') + '" placeholder="เช่น Open Showcase Series / ลูกค้า ABC"></div>' +
-    '<div class="field"><label>รายละเอียด / ลูกค้า (ไม่บังคับ)</label><textarea id="f-project-desc" placeholder="รายละเอียดเพิ่มเติม">' + (p?esc(p.description):'') + '</textarea></div>' +
-    '<div class="field"><label>เจ้าของโปรเจกต์ (ไม่บังคับ)</label><input type="text" id="f-project-owner" value="' + (p?esc(p.owner||''):'') + '" placeholder="ชื่อผู้รับผิดชอบหลักของโปรเจกต์"></div>' +
     '<div class="field-row">' +
-      '<div class="field"><label>กลุ่มงานด้านคุณภาพ</label><select id="f-project-category">' + catOptions + '</select>' +
-        '<div id="f-category-desc-hint" style="font-size:11.5px; color:var(--ink-faint); margin-top:6px; line-height:1.4;">' + esc(catDesc) + '</div>' +
-      '</div>' +
-      '<div class="field"><label>ระดับความสำคัญ</label><select id="f-project-priority">' + prioOptions + '</select></div>' +
+      '<div class="field"><label>ชื่อโปรเจกต์ *</label><input type="text" id="f-project-name" value="' + (p?esc(p.name):'') + '" placeholder="ชื่อโปรเจกต์..."></div>' +
+      '<div class="field"><label>ผู้สร้าง / เจ้าของโปรเจกต์</label><input type="text" id="f-project-owner" value="' + (p?esc(p.owner||''):'') + '" placeholder="ชื่อผู้สร้าง..."></div>' +
+    '</div>' +
+    '<div class="field"><label>รายละเอียด / ลูกค้า (ไม่บังคับ)</label><textarea id="f-project-desc" placeholder="รายละเอียดเพิ่มเติม">' + (p?esc(p.description):'') + '</textarea></div>' +
+    '<div class="field"><label>ประเภท</label>' +
+      '<div class="category-grid" id="f-project-category-grid" data-selected="' + selectedCat + '">' + catCards + '</div>' +
     '</div>' +
     '<div class="field" id="f-category-other-wrap" style="display:' + (selectedCat==='other'?'block':'none') + ';"><label>ระบุกลุ่มงาน (อื่นๆ)</label><input type="text" id="f-project-category-other" value="' + (p?esc(p.categoryOther||''):'') + '" placeholder="พิมพ์ชื่อกลุ่มงานที่ต้องการ"></div>' +
-    '<div class="field"><label>สีประจำโปรเจกต์</label><div class="swatches" id="f-project-swatches" data-color="' + color + '">' + swatches + '</div></div>' +
+    '<div class="field"><label>ระดับความสำคัญ</label>' +
+      '<div class="priority-grid" id="f-project-priority-grid" data-selected="' + selectedPriority + '">' + prioBtns + '</div>' +
+    '</div>' +
+    '<div class="field"><label>สีโปรเจกต์</label><div class="swatches" id="f-project-swatches" data-color="' + color + '">' + swatches + '</div></div>' +
     '<div class="field-error" id="f-project-error">กรุณากรอกชื่อโปรเจกต์</div>' +
   '</div>' +
   '<div class="modal-foot"><button class="btn btn-ghost" data-action="close-modal">ยกเลิก</button>' +
-  '<button class="btn btn-primary" data-action="save-project" data-id="' + (p?p.id:'') + '">' + (p?'บันทึกการแก้ไข':'เพิ่มโปรเจกต์') + '</button></div>';
+  '<button class="btn btn-primary" data-action="save-project" data-id="' + (p?p.id:'') + '">' + (p?'บันทึกการแก้ไข':'+ สร้างโปรเจกต์') + '</button></div>';
 }
 
 function taskModalHtml(projectId, editId){
@@ -1134,10 +1162,10 @@ function handleSaveProject(editId){
   var name = document.getElementById('f-project-name').value.trim();
   var desc = document.getElementById('f-project-desc').value.trim();
   var owner = document.getElementById('f-project-owner').value.trim();
-  var category = document.getElementById('f-project-category').value;
+  var category = document.getElementById('f-project-category-grid').getAttribute('data-selected');
   var categoryOtherEl = document.getElementById('f-project-category-other');
   var categoryOther = categoryOtherEl ? categoryOtherEl.value.trim() : '';
-  var priority = document.getElementById('f-project-priority').value;
+  var priority = document.getElementById('f-project-priority-grid').getAttribute('data-selected');
   var color = document.getElementById('f-project-swatches').getAttribute('data-color');
   var errEl = document.getElementById('f-project-error');
   if(!name){ errEl.classList.add('show'); return; }
@@ -1357,6 +1385,34 @@ document.addEventListener('click', function(e){
       Array.prototype.forEach.call(wrap.querySelectorAll('.swatch'), function(sw){ sw.classList.remove('selected'); });
       el.classList.add('selected');
       break;
+    case 'select-category':
+      var catId = el.getAttribute('data-cat-id');
+      var catGrid = document.getElementById('f-project-category-grid');
+      catGrid.setAttribute('data-selected', catId);
+      Array.prototype.forEach.call(catGrid.querySelectorAll('.category-card'), function(card){
+        var isSel = card.getAttribute('data-cat-id') === catId;
+        card.classList.toggle('selected', isSel);
+        var checkEl = card.querySelector('.cc-check');
+        if(isSel && !checkEl){
+          card.querySelector('.cc-title').insertAdjacentHTML('beforeend', ' <span class="cc-check">&#10003;</span>');
+        } else if(!isSel && checkEl){
+          checkEl.remove();
+        }
+      });
+      var otherWrap = document.getElementById('f-category-other-wrap');
+      if(otherWrap) otherWrap.style.display = (catId === 'other') ? 'block' : 'none';
+      break;
+    case 'select-priority':
+      var pid = el.getAttribute('data-pid');
+      var prioGrid = document.getElementById('f-project-priority-grid');
+      prioGrid.setAttribute('data-selected', pid);
+      Array.prototype.forEach.call(prioGrid.querySelectorAll('.priority-btn'), function(btn){
+        var isSel = btn.getAttribute('data-pid') === pid;
+        btn.classList.toggle('selected', isSel);
+        var info = priorityById(btn.getAttribute('data-pid'));
+        btn.style.background = isSel ? info.tint : '';
+      });
+      break;
     case 'save-project':
       handleSaveProject(id || null);
       break;
@@ -1463,14 +1519,6 @@ document.addEventListener('change', function(e){
     projectFilterPriority = e.target.value;
     render();
     return;
-  }
-  if(e.target.id === 'f-project-category'){
-    var catId = e.target.value;
-    var hint = document.getElementById('f-category-desc-hint');
-    var c = categoryById(catId);
-    if(hint) hint.textContent = c ? c.desc : '';
-    var otherWrap = document.getElementById('f-category-other-wrap');
-    if(otherWrap) otherWrap.style.display = (catId === 'other') ? 'block' : 'none';
   }
 }, false);
 
