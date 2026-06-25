@@ -938,9 +938,20 @@ function renderGanttSection(mode){
 
   var effectiveFilter = scopedProjectId || ganttFilterProject;
   var relevantProjects = effectiveFilter === 'all' ? projects : projects.filter(function(p){ return p.id === effectiveFilter; });
+
+  // Hide fully-done projects from the all-projects Gantt view
+  if(effectiveFilter === 'all'){
+    relevantProjects = relevantProjects.filter(function(p){
+      var pt = tasks.filter(function(t){ return t.projectId === p.id; });
+      if(pt.length === 0) return true; // no tasks yet — still show
+      return !pt.every(function(t){ return Number(t.progress) === 100; });
+    });
+  }
+
+  var activeProjectIds = relevantProjects.reduce(function(acc, p){ acc[p.id] = true; return acc; }, {});
   var baseTasks = tasks.filter(function(t){
     if(!t.startDate || !t.dueDate) return false;
-    if(effectiveFilter === 'all') return true;
+    if(effectiveFilter === 'all') return !!activeProjectIds[t.projectId];
     return t.projectId === effectiveFilter;
   });
 
