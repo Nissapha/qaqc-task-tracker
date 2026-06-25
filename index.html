@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>QA/QC Task Tracker</title>
+<title>QA/QC Daily Tracker</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
 
@@ -737,11 +737,11 @@ function renderTopbar(){
   '<div class="topbar"><div class="topbar-inner">' +
     '<div class="brand">' +
       '<div class="brand-eyebrow">THERMEDEZ &middot; QUALITY DIVISION</div>' +
-      '<div class="brand-title">QA/QC Task Tracker</div>' +
+      '<div class="brand-title">QA/QC Daily Tracker</div>' +
       '<div class="brand-sub">ระบบติดตามงานภายในทีม QA/QC</div>' +
     '</div>' +
     '<div class="tabs">' +
-      tab('projects','หน้าแรก') +
+      tab('projects','Project') +
       tab('todos','To-Do List') +
       tab('overview','ภาพรวม &amp; ภาระงาน') +
     '</div>' +
@@ -759,7 +759,7 @@ function renderContent(){
 /* ===================== Projects list (Home) ===================== */
 function renderProjectsList(){
   var head = '<div class="page-head">' +
-      '<div><div class="page-title">หน้าแรก</div><div class="page-desc">ภาพรวมระยะเวลาโครงการ และโปรเจกต์ตรวจสอบคุณภาพทั้งหมด</div></div>' +
+      '<div><div class="page-title">Project</div><div class="page-desc">ภาพรวมระยะเวลาโครงการ และโปรเจกต์ตรวจสอบคุณภาพทั้งหมด</div></div>' +
       '<button class="btn btn-primary" data-action="open-project-modal">+ เพิ่มโปรเจกต์ใหม่</button>' +
     '</div>';
 
@@ -793,6 +793,58 @@ function renderProjectsList(){
     return true;
   });
 
+  // Helper: is project fully done (all tasks 100% or no tasks but createdAt exists)
+  function isProjectDone(p){
+    var pt = tasksOfProject(p.id);
+    if(pt.length === 0) return false;
+    return pt.every(function(t){ return Number(t.progress) === 100; });
+  }
+  // Sort helper: by earliest task startDate, fallback createdAt
+  function projectStartDate(p){
+    var pt = tasksOfProject(p.id).filter(function(t){ return t.startDate; });
+    if(!pt.length) return p.createdAt ? String(p.createdAt) : '9999';
+    return pt.slice().sort(function(a,b){ return a.startDate.localeCompare(b.startDate); })[0].startDate;
+  }
+
+  var activeProjects = filtered.filter(function(p){ return !isProjectDone(p); })
+    .slice().sort(function(a,b){ return projectStartDate(a).localeCompare(projectStartDate(b)); });
+  var doneProjects = filtered.filter(function(p){ return isProjectDone(p); })
+    .slice().sort(function(a,b){ return projectStartDate(a).localeCompare(projectStartDate(b)); });
+
+  function buildProjectCard(p){
+    var pt = tasksOfProject(p.id);
+    var total = pt.length;
+    var done = pt.filter(function(t){ return Number(t.progress) === 100; }).length;
+    var overdue = pt.filter(isOverdue).length;
+    var pct = total ? Math.round(pt.reduce(function(s,t){ return s + Number(t.progress); },0) / total) : 0;
+    var scolor = pct === 100 ? 'var(--teal)' : (pct === 0 ? 'var(--slate)' : 'var(--amber)');
+    var catLabel = projectCategoryLabel(p);
+    var prio = p.priority ? priorityById(p.priority) : null;
+    return '<div class="panel project-card" style="--pcolor:' + p.color + '" data-action="open-project" data-id="' + p.id + '">' +
+      '<div class="project-card-top">' +
+        '<div style="display:flex; gap:8px;"><span class="project-tag" style="--pcolor:' + p.color + '"></span>' +
+          '<div><div class="project-name">' + esc(p.name) + '</div>' +
+          (p.description ? '<div class="project-desc">' + esc(p.description) + '</div>' : '') + '</div>' +
+        '</div>' +
+        '<div class="stamp-wrap"><div class="stamp" style="--spct:' + pct + '; --scolor:' + scolor + '"><span>' + pct + '%</span></div></div>' +
+      '</div>' +
+      '<div style="display:flex; gap:6px; flex-wrap:wrap;">' +
+        (prio ? '<span class="badge ' + prio.cls + '">' + prio.label + '</span>' : '') +
+        (catLabel ? '<span class="badge badge-cat">' + esc(catLabel) + '</span>' : '') +
+      '</div>' +
+      (p.owner ? '<div style="font-size:11.5px; color:var(--ink-faint);">เจ้าของโปรเจกต์: ' + esc(p.owner) + '</div>' : '') +
+      '<div class="project-card-bottom">' +
+        '<div class="project-stats">' +
+          '<div>งานทั้งหมด <b>' + total + '</b> &middot; เสร็จแล้ว <b>' + done + '</b>' + (overdue ? ' &middot; <span style="color:var(--coral); font-weight:700;">เลยกำหนด ' + overdue + '</span>' : '') + '</div>' +
+        '</div>' +
+        '<div class="card-actions">' +
+          '<button class="btn btn-ghost btn-sm" data-action="edit-project" data-id="' + p.id + '">แก้ไข</button>' +
+          '<button class="btn btn-danger btn-sm" data-action="delete-project" data-id="' + p.id + '">ลบ</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
   var gridHtml;
   if(filtered.length === 0){
     gridHtml = '<div class="empty-state">' +
@@ -801,40 +853,16 @@ function renderProjectsList(){
       '<div class="es-sub">ลองเปลี่ยนหรือล้างตัวกรองดู</div>' +
     '</div>';
   } else {
-    var cards = filtered.map(function(p){
-      var pt = tasksOfProject(p.id);
-      var total = pt.length;
-      var done = pt.filter(function(t){ return Number(t.progress) === 100; }).length;
-      var overdue = pt.filter(isOverdue).length;
-      var pct = total ? Math.round(pt.reduce(function(s,t){ return s + Number(t.progress); },0) / total) : 0;
-      var scolor = pct === 100 ? 'var(--teal)' : (pct === 0 ? 'var(--slate)' : 'var(--amber)');
-      var catLabel = projectCategoryLabel(p);
-      var prio = p.priority ? priorityById(p.priority) : null;
-      return '<div class="panel project-card" style="--pcolor:' + p.color + '" data-action="open-project" data-id="' + p.id + '">' +
-        '<div class="project-card-top">' +
-          '<div style="display:flex; gap:8px;"><span class="project-tag" style="--pcolor:' + p.color + '"></span>' +
-            '<div><div class="project-name">' + esc(p.name) + '</div>' +
-            (p.description ? '<div class="project-desc">' + esc(p.description) + '</div>' : '') + '</div>' +
-          '</div>' +
-          '<div class="stamp-wrap"><div class="stamp" style="--spct:' + pct + '; --scolor:' + scolor + '"><span>' + pct + '%</span></div></div>' +
-        '</div>' +
-        '<div style="display:flex; gap:6px; flex-wrap:wrap;">' +
-          (prio ? '<span class="badge ' + prio.cls + '">' + prio.label + '</span>' : '') +
-          (catLabel ? '<span class="badge badge-cat">' + esc(catLabel) + '</span>' : '') +
-        '</div>' +
-        (p.owner ? '<div style="font-size:11.5px; color:var(--ink-faint);">เจ้าของโปรเจกต์: ' + esc(p.owner) + '</div>' : '') +
-        '<div class="project-card-bottom">' +
-          '<div class="project-stats">' +
-            '<div>งานทั้งหมด <b>' + total + '</b> &middot; เสร็จแล้ว <b>' + done + '</b>' + (overdue ? ' &middot; <span style="color:var(--coral); font-weight:700;">เลยกำหนด ' + overdue + '</span>' : '') + '</div>' +
-          '</div>' +
-          '<div class="card-actions">' +
-            '<button class="btn btn-ghost btn-sm" data-action="edit-project" data-id="' + p.id + '">แก้ไข</button>' +
-            '<button class="btn btn-danger btn-sm" data-action="delete-project" data-id="' + p.id + '">ลบ</button>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
-    }).join('');
-    gridHtml = '<div class="project-grid">' + cards + '</div>';
+    var activeGrid = activeProjects.length > 0
+      ? '<div class="project-grid">' + activeProjects.map(buildProjectCard).join('') + '</div>'
+      : '';
+    var doneGrid = doneProjects.length > 0
+      ? '<div style="margin-top:24px;">' +
+          '<div class="section-label" style="color:var(--teal); margin-bottom:12px;">&#10003; โปรเจกต์ที่เสร็จสมบูรณ์แล้ว &middot; ' + doneProjects.length + ' โปรเจกต์</div>' +
+          '<div class="project-grid" style="opacity:0.82;">' + doneProjects.map(buildProjectCard).join('') + '</div>' +
+        '</div>'
+      : '';
+    gridHtml = activeGrid + doneGrid;
   }
 
   var ganttPanel = '<div class="panel" style="padding:16px 18px; margin-top:24px;">' +
@@ -853,7 +881,7 @@ function renderProjectDetail(){
   var catLabel = projectCategoryLabel(p);
   var prio = p.priority ? priorityById(p.priority) : null;
 
-  var head = '<button class="back-link" data-action="back-to-projects">&larr; กลับไปหน้าแรก</button>' +
+  var head = '<button class="back-link" data-action="back-to-projects">&larr; กลับไปหน้า Project</button>' +
     '<div class="page-head">' +
       '<div><div class="page-title" style="display:flex; align-items:center; gap:8px;"><span class="project-tag" style="--pcolor:' + p.color + '"></span>' + esc(p.name) + '</div>' +
       (p.description ? '<div class="page-desc">' + esc(p.description) + '</div>' : '') +
