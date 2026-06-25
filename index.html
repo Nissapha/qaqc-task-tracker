@@ -217,6 +217,22 @@ table.tk tr.task-row:hover{background:#FAFCFD;}
 .priority-btn:hover{border-color:var(--ink-faint);}
 .priority-btn.selected{border-color:currentColor;}
 
+.todo-filter-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px;}
+@media (max-width:760px){.todo-filter-grid{grid-template-columns:repeat(2,1fr);}}
+.todo-filter-box{background:var(--panel); border:1.5px solid var(--line); border-radius:var(--radius); padding:14px 16px; cursor:pointer; transition:border-color .12s ease, box-shadow .12s ease; text-align:left;}
+.todo-filter-box:hover{border-color:var(--navy);}
+.todo-filter-box.active{border-color:var(--navy); background:var(--navy-soft); box-shadow:var(--shadow);}
+.tfb-icon{font-size:16px; margin-bottom:6px;}
+.tfb-count{font-family:'IBM Plex Mono'; font-size:24px; font-weight:700; color:var(--ink);}
+.tfb-label{font-size:12px; color:var(--ink-soft); font-weight:600; margin-top:2px;}
+.todo-filter-box.active .tfb-count{color:var(--navy);}
+
+.todo-status-select{padding:5px 8px; border:1px solid var(--line); border-radius:7px; font-size:12px; font-family:'IBM Plex Sans'; background:var(--panel); cursor:pointer; font-weight:600;}
+.status-chip-bar{display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;}
+.status-chip{padding:7px 14px; border-radius:20px; border:1.5px solid var(--line); font-size:12.5px; font-weight:600; cursor:pointer; background:var(--panel); color:var(--ink-soft);}
+.status-chip:hover{border-color:var(--navy);}
+.status-chip.active{background:var(--navy); border-color:var(--navy); color:#fff;}
+
 /* ---------- Task detail modal ---------- */
 .task-detail-meta{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px; font-size:13px;}
 .tdm-item{background:#FAFCFD; border:1px solid var(--line-soft); border-radius:8px; padding:9px 11px;}
@@ -338,14 +354,18 @@ var db = firebase.database();
 // Separate data path from the existing QC inspection-records app to avoid collisions
 var projectsRef = db.ref('qaTaskTracker/projects');
 var tasksRef = db.ref('qaTaskTracker/tasks');
+var todosRef = db.ref('qaTaskTracker/todos');
 
 
 /* ===================== State ===================== */
 var projects = [];
 var tasks = [];
+var todos = [];
 var currentView = 'projects';
 var currentProjectId = null;
 var currentTaskId = null;
+var todoFilterWindow = 'all'; // 'all' | 'today' | 'week' | 'month' | 'overdue'
+var todoFilterStatus = 'all';
 var ganttFilterProject = 'all';
 var ganttRangeStart = null; // 'YYYY-MM-DD' or null = auto-fit
 var ganttRangeEnd = null;
@@ -356,7 +376,7 @@ var projectFilterPriority = 'all';
 var projectFilterOwner = '';
 var dataReady = false;
 var firebaseError = null;
-var projectsLoaded = false, tasksLoaded = false;
+var projectsLoaded = false, tasksLoaded = false, todosLoaded = false;
 
 var PROJECT_COLORS = ['#4F46E5','#0284C7','#16A34A','#D97706','#DC2626','#9333EA','#2563EB','#EA580C','#64748B','#DB2777','#0D9488','#92400E'];
 
@@ -383,6 +403,33 @@ function projectCategoryLabel(p){
   return c ? c.label : null;
 }
 
+var TODO_STATUSES = [
+  {id:'not_started', label:'ยังไม่ได้เริ่ม', cls:'badge-slate', color:'var(--slate)'},
+  {id:'in_progress', label:'กำลังดำเนินการ', cls:'badge-amber', color:'var(--amber)'},
+  {id:'done', label:'เสร็จ', cls:'badge-teal', color:'var(--teal)'}
+];
+function todoStatusById(id){ return TODO_STATUSES.find(function(s){ return s.id === id; }) || TODO_STATUSES[0]; }
+function todoById(id){ return todos.find(function(t){ return t.id === id; }); }
+function isTodoOverdue(t){ return t.dueDate && t.dueDate < todayStr() && t.status !== 'done'; }
+function todoStatusInfo(t){
+  if(isTodoOverdue(t)) return {label:'เกินกำหนด', cls:'badge-coral', color:'var(--coral)'};
+  return todoStatusById(t.status);
+}
+function sortByDueDateTodo(list){
+  return list.slice().sort(function(a,b){ return (a.dueDate||'9999').localeCompare(b.dueDate||'9999'); });
+}
+function buildOptionGrid(gridId, options, selectedId, iconHtml){
+  var btns = options.map(function(opt){
+    var sel = opt.id === selectedId;
+    var tint = opt.tint || 'var(--slate-soft)';
+    var color = opt.flagColor || opt.color || 'var(--ink)';
+    return '<div class="priority-btn' + (sel?' selected':'') + '" data-action="select-option" data-val="' + opt.id + '" data-tint="' + tint + '" style="color:' + color + '; ' + (sel ? ('background:'+tint+';') : '') + '">' +
+      (iconHtml ? iconHtml + ' ' : '') + opt.label.toUpperCase() +
+    '</div>';
+  }).join('');
+  return '<div class="priority-grid" id="' + gridId + '" data-selected="' + selectedId + '">' + btns + '</div>';
+}
+
 /* ===================== Storage (Firebase Realtime Database) ===================== */
 function notesToObj(notesArr){
   var o = {};
@@ -394,7 +441,7 @@ function notesFromSnapshot(notesVal){
   return Object.keys(notesVal).map(function(k){ return notesVal[k]; });
 }
 function checkReady(){
-  if(projectsLoaded && tasksLoaded) dataReady = true;
+  if(projectsLoaded && tasksLoaded && todosLoaded) dataReady = true;
   render();
 }
 function loadAll(){
@@ -424,6 +471,17 @@ function loadAll(){
     tasksLoaded = true;
     checkReady();
   });
+  todosRef.on('value', function(snapshot){
+    var val = snapshot.val() || {};
+    todos = Object.keys(val).map(function(k){ return val[k]; });
+    todosLoaded = true;
+    checkReady();
+  }, function(err){
+    console.error('todos listener error', err);
+    firebaseError = err && err.message ? err.message : String(err);
+    todosLoaded = true;
+    checkReady();
+  });
 }
 function pushProject(p){
   projectsRef.child(p.id).set(p).catch(function(e){ console.error('save project failed', e); });
@@ -438,6 +496,12 @@ function pushTask(t){
 }
 function removeTask(id){
   tasksRef.child(id).remove().catch(function(e){ console.error('delete task failed', e); });
+}
+function pushTodo(t){
+  todosRef.child(t.id).set(t).catch(function(e){ console.error('save todo failed', e); });
+}
+function removeTodo(id){
+  todosRef.child(id).remove().catch(function(e){ console.error('delete todo failed', e); });
 }
 
 /* ===================== Helpers ===================== */
@@ -632,6 +696,7 @@ function renderTopbar(){
     '</div>' +
     '<div class="tabs">' +
       tab('projects','หน้าแรก') +
+      tab('todos','To-Do List') +
       tab('overview','ภาพรวม &amp; ภาระงาน') +
     '</div>' +
   '</div></div>';
@@ -640,6 +705,7 @@ function renderContent(){
   if(currentView === 'projects'){
     return currentProjectId ? renderProjectDetail() : renderProjectsList();
   }
+  if(currentView === 'todos') return renderTodosView();
   if(currentView === 'overview') return renderOverviewView();
   return '';
 }
@@ -986,7 +1052,126 @@ function renderGanttSection(mode){
   return toolbar + legend + gantt;
 }
 
-/* ===================== Overview & Workload ===================== */
+/* ===================== To-Do List ===================== */
+function renderTodosView(){
+  var head = '<div class="page-head">' +
+      '<div><div class="page-title">To-Do List</div><div class="page-desc">รายการงาน (Job) ที่ต้องติดตาม นอกเหนือจากงานในโปรเจกต์</div></div>' +
+      '<button class="btn btn-primary" data-action="open-todo-modal">+ เพิ่มงาน</button>' +
+    '</div>';
+
+  if(todos.length === 0){
+    return head + '<div class="empty-state">' +
+      '<div class="es-icon">&#128221;</div>' +
+      '<div class="es-title">ยังไม่มีงานใน To-Do List</div>' +
+      '<div class="es-sub">เพิ่มงานที่ต้องติดตาม พร้อมกำหนดผู้รับผิดชอบ วันกำหนดส่ง ความเร่งด่วน และความสำคัญ</div>' +
+      '<button class="btn btn-primary" data-action="open-todo-modal">+ เพิ่มงาน</button>' +
+    '</div>';
+  }
+
+  var now = new Date();
+  var todayS = todayStr();
+  var weekStartS = toDateStr(mostRecentMonday(now));
+  var weekEndS = toDateStr(addDays(mostRecentMonday(now), 6));
+  var monthStartS = toDateStr(firstDayOfMonth(now));
+  var monthEndS = toDateStr(lastDayOfMonth(now));
+
+  var todayCount = todos.filter(function(t){ return t.dueDate === todayS; }).length;
+  var weekCount = todos.filter(function(t){ return t.dueDate >= weekStartS && t.dueDate <= weekEndS; }).length;
+  var monthCount = todos.filter(function(t){ return t.dueDate >= monthStartS && t.dueDate <= monthEndS; }).length;
+  var overdueCount = todos.filter(isTodoOverdue).length;
+
+  function filterBox(key, label, count, icon){
+    var active = todoFilterWindow === key;
+    return '<div class="todo-filter-box' + (active?' active':'') + '" data-action="toggle-todo-window" data-key="' + key + '">' +
+      '<div class="tfb-icon">' + icon + '</div>' +
+      '<div class="tfb-count">' + count + '</div>' +
+      '<div class="tfb-label">' + label + '</div>' +
+    '</div>';
+  }
+  var filterBoxes = '<div class="todo-filter-grid">' +
+    filterBox('today', 'วันนี้', todayCount, '&#128197;') +
+    filterBox('week', 'สัปดาห์นี้', weekCount, '&#128197;') +
+    filterBox('month', 'เดือนนี้', monthCount, '&#128197;') +
+    filterBox('overdue', 'เกินกำหนด', overdueCount, '&#9200;') +
+  '</div>';
+
+  function statusChip(key, label){
+    var active = todoFilterStatus === key;
+    return '<div class="status-chip' + (active?' active':'') + '" data-action="toggle-todo-status-filter" data-key="' + key + '">' + label + '</div>';
+  }
+  var statusChips = '<div class="status-chip-bar">' +
+    statusChip('all', 'ทั้งหมด') +
+    TODO_STATUSES.map(function(s){ return statusChip(s.id, s.label); }).join('') +
+  '</div>';
+
+  var filtered = todos.filter(function(t){
+    if(todoFilterStatus !== 'all' && t.status !== todoFilterStatus) return false;
+    if(todoFilterWindow === 'today' && t.dueDate !== todayS) return false;
+    if(todoFilterWindow === 'week' && !(t.dueDate >= weekStartS && t.dueDate <= weekEndS)) return false;
+    if(todoFilterWindow === 'month' && !(t.dueDate >= monthStartS && t.dueDate <= monthEndS)) return false;
+    if(todoFilterWindow === 'overdue' && !isTodoOverdue(t)) return false;
+    return true;
+  });
+  var sorted = sortByDueDateTodo(filtered);
+
+  if(sorted.length === 0){
+    return head + filterBoxes + statusChips + '<div class="empty-state">' +
+      '<div class="es-icon">&#128269;</div>' +
+      '<div class="es-title">ไม่พบงานตามตัวกรองที่เลือก</div>' +
+      '<div class="es-sub">ลองเปลี่ยนหรือล้างตัวกรองดู</div>' +
+    '</div>';
+  }
+
+  var rows = sorted.map(function(t){
+    var s = todoStatusInfo(t);
+    var urg = priorityById(t.urgency);
+    var imp = priorityById(t.importance);
+    var statusOptions = TODO_STATUSES.map(function(st){
+      return '<option value="' + st.id + '"' + (t.status===st.id?' selected':'') + '>' + st.label + '</option>';
+    }).join('');
+    return '<tr class="task-row" data-action="open-todo-modal" data-id="' + t.id + '">' +
+      '<td><div class="task-title">' + esc(t.description) + '</div></td>' +
+      '<td>' + esc(t.assignee) + '</td>' +
+      '<td class="mono">' + fmtDateThai(t.dueDate) + '</td>' +
+      '<td><span class="badge ' + urg.cls + '">' + urg.label + '</span></td>' +
+      '<td><span class="badge ' + imp.cls + '">' + imp.label + '</span></td>' +
+      '<td>' + (isTodoOverdue(t) ? '<span class="badge badge-coral">เกินกำหนด</span>' : '<select class="todo-status-select" data-action="todo-status-select" data-id="' + t.id + '">' + statusOptions + '</select>') + '</td>' +
+      '<td><button class="btn btn-danger btn-sm" data-action="delete-todo" data-id="' + t.id + '">ลบ</button></td>' +
+    '</tr>';
+  }).join('');
+
+  return head + filterBoxes + statusChips + '<div class="panel"><div class="table-wrap"><table class="tk">' +
+    '<thead><tr><th>รายละเอียดงาน</th><th>ผู้รับผิดชอบ</th><th>Due Date</th><th>ความเร่งด่วน</th><th>ความสำคัญ</th><th>สถานะ</th><th></th></tr></thead>' +
+    '<tbody>' + rows + '</tbody>' +
+  '</table></div></div>';
+}
+
+function todoModalHtml(editId){
+  var t = editId ? todoById(editId) : null;
+  var selectedUrgency = t && t.urgency ? t.urgency : 'medium';
+  var selectedImportance = t && t.importance ? t.importance : 'medium';
+  var selectedStatus = t && t.status ? t.status : 'not_started';
+
+  return '' +
+  '<div class="modal-head"><h3>' + (t ? 'แก้ไขงาน' : 'เพิ่มงานใหม่ (To-Do)') + '</h3><button class="modal-close" data-action="close-modal">&times;</button></div>' +
+  '<div class="modal-body">' +
+    '<div class="field"><label>รายละเอียดงาน *</label><textarea id="f-todo-desc" placeholder="รายละเอียดงานที่ต้องทำ...">' + (t?esc(t.description):'') + '</textarea></div>' +
+    '<div class="field-row">' +
+      '<div class="field"><label>ผู้รับผิดชอบ *</label><input type="text" id="f-todo-assignee" value="' + (t?esc(t.assignee):'') + '" placeholder="ชื่อผู้รับผิดชอบ"></div>' +
+      '<div class="field"><label>Due Date *</label><input type="date" id="f-todo-due" value="' + (t?t.dueDate:'') + '"></div>' +
+    '</div>' +
+    '<div class="field"><label>ความเร่งด่วน (Urgency)</label>' + buildOptionGrid('f-todo-urgency-grid', PRIORITY_LEVELS, selectedUrgency, '&#9889;') + '</div>' +
+    '<div class="field"><label>ความสำคัญ (Importance)</label>' + buildOptionGrid('f-todo-importance-grid', PRIORITY_LEVELS, selectedImportance, '&#11088;') + '</div>' +
+    '<div class="field"><label>สถานะ</label>' + buildOptionGrid('f-todo-status-grid', TODO_STATUSES, selectedStatus, '') + '</div>' +
+    '<div class="field-error" id="f-todo-error"></div>' +
+  '</div>' +
+  '<div class="modal-foot">' +
+    (t ? '<button class="btn btn-danger" data-action="delete-todo" data-id="' + t.id + '">ลบ</button>' : '') +
+    '<button class="btn btn-ghost" data-action="close-modal">ยกเลิก</button>' +
+    '<button class="btn btn-primary" data-action="save-todo" data-id="' + (t?t.id:'') + '">' + (t?'บันทึกการแก้ไข':'+ เพิ่มงาน') + '</button>' +
+  '</div>';
+}
+
 function renderOverviewView(){
   var head = '<div class="page-head">' +
       '<div><div class="page-title">ภาพรวมและภาระงาน</div><div class="page-desc">สรุปสถานะงานทั้งหมดและภาระงานของแต่ละคน</div></div>' +
@@ -1000,45 +1185,48 @@ function renderOverviewView(){
   var notStartedCount = tasks.filter(function(t){ return Number(t.progress)===0 && !isOverdue(t); }).length;
   var completionRate = totalTasks ? Math.round(doneCount/totalTasks*100) : 0;
 
-  if(totalTasks === 0){
+  if(totalTasks === 0 && todos.length === 0){
     return head + '<div class="empty-state">' +
       '<div class="es-icon">&#128202;</div>' +
       '<div class="es-title">ยังไม่มีข้อมูลงาน</div>' +
-      '<div class="es-sub">เริ่มสร้างโปรเจกต์และเพิ่มงานเพื่อดูสรุปภาพรวมและภาระงานของทีม</div>' +
+      '<div class="es-sub">เริ่มสร้างโปรเจกต์ เพิ่มงาน หรือเพิ่มรายการ To-Do เพื่อดูสรุปภาพรวมและภาระงานของทีม</div>' +
     '</div>';
   }
 
-  var kpis = '<div class="kpi-grid">' +
-    '<div class="panel kpi-card" style="--accent:var(--navy)"><div class="kpi-label">โปรเจกต์ทั้งหมด</div><div class="kpi-value">' + totalProjects + '</div><div class="kpi-foot">งานทั้งหมด ' + totalTasks + ' รายการ</div></div>' +
-    '<div class="panel kpi-card" style="--accent:var(--teal)"><div class="kpi-label">เสร็จสมบูรณ์</div><div class="kpi-value">' + completionRate + '%</div><div class="kpi-foot">' + doneCount + ' จาก ' + totalTasks + ' งาน</div></div>' +
-    '<div class="panel kpi-card" style="--accent:var(--amber)"><div class="kpi-label">กำลังดำเนินการ</div><div class="kpi-value">' + inProgressCount + '</div><div class="kpi-foot">ยังไม่ได้ดำเนินการ ' + notStartedCount + ' งาน</div></div>' +
-    '<div class="panel kpi-card" style="--accent:var(--coral)"><div class="kpi-label">เลยกำหนด</div><div class="kpi-value">' + overdueCount + '</div><div class="kpi-foot">ต้องติดตามเร่งด่วน</div></div>' +
-  '</div>';
-
-  var segs = [
-    {key:'ns', n:notStartedCount, c:'var(--slate)', label:'ยังไม่ได้เริ่ม'},
-    {key:'ip', n:inProgressCount, c:'var(--amber)', label:'กำลังดำเนินการ'},
-    {key:'dn', n:doneCount, c:'var(--teal)', label:'เสร็จสมบูรณ์'},
-    {key:'od', n:overdueCount, c:'var(--coral)', label:'เลยกำหนด'}
-  ];
-  var donutSegs = segs.map(function(s){ return {value:s.n, color:s.c}; });
-  var donutSvg = buildDonutSvg(donutSegs, {size:152, thickness:22, centerLabel:completionRate+'%', centerSub:'เสร็จสมบูรณ์'});
-  var legendRows = segs.map(function(s){
-    var pct = totalTasks ? Math.round(s.n/totalTasks*100) : 0;
-    return '<div style="display:flex; align-items:center; gap:9px; padding:6px 0;">' +
-      '<span style="width:11px; height:11px; border-radius:3px; background:' + s.c + '; flex-shrink:0;"></span>' +
-      '<span style="flex:1; font-size:13px; color:var(--ink);">' + s.label + '</span>' +
-      '<span class="mono" style="font-size:13px; font-weight:700; color:var(--ink);">' + s.n + '</span>' +
-      '<span class="mono" style="font-size:11.5px; color:var(--ink-faint); min-width:36px; text-align:right;">' + pct + '%</span>' +
+  var kpis = '', statusDonutPanel = '';
+  if(totalTasks > 0){
+    kpis = '<div class="kpi-grid">' +
+      '<div class="panel kpi-card" style="--accent:var(--navy)"><div class="kpi-label">โปรเจกต์ทั้งหมด</div><div class="kpi-value">' + totalProjects + '</div><div class="kpi-foot">งานทั้งหมด ' + totalTasks + ' รายการ</div></div>' +
+      '<div class="panel kpi-card" style="--accent:var(--teal)"><div class="kpi-label">เสร็จสมบูรณ์</div><div class="kpi-value">' + completionRate + '%</div><div class="kpi-foot">' + doneCount + ' จาก ' + totalTasks + ' งาน</div></div>' +
+      '<div class="panel kpi-card" style="--accent:var(--amber)"><div class="kpi-label">กำลังดำเนินการ</div><div class="kpi-value">' + inProgressCount + '</div><div class="kpi-foot">ยังไม่ได้ดำเนินการ ' + notStartedCount + ' งาน</div></div>' +
+      '<div class="panel kpi-card" style="--accent:var(--coral)"><div class="kpi-label">เลยกำหนด</div><div class="kpi-value">' + overdueCount + '</div><div class="kpi-foot">ต้องติดตามเร่งด่วน</div></div>' +
     '</div>';
-  }).join('');
-  var statusDonutPanel = '<div class="panel" style="padding:18px 20px; margin-bottom:20px; display:flex; gap:28px; align-items:center; flex-wrap:wrap;">' +
-    donutSvg +
-    '<div style="flex:1; min-width:200px;">' +
-      '<div class="section-label" style="margin-top:0;">สัดส่วนสถานะงานทั้งหมด &middot; ' + totalTasks + ' งาน</div>' +
-      legendRows +
-    '</div>' +
-  '</div>';
+
+    var segs = [
+      {key:'ns', n:notStartedCount, c:'var(--slate)', label:'ยังไม่ได้เริ่ม'},
+      {key:'ip', n:inProgressCount, c:'var(--amber)', label:'กำลังดำเนินการ'},
+      {key:'dn', n:doneCount, c:'var(--teal)', label:'เสร็จสมบูรณ์'},
+      {key:'od', n:overdueCount, c:'var(--coral)', label:'เลยกำหนด'}
+    ];
+    var donutSegs = segs.map(function(s){ return {value:s.n, color:s.c}; });
+    var donutSvg = buildDonutSvg(donutSegs, {size:152, thickness:22, centerLabel:completionRate+'%', centerSub:'เสร็จสมบูรณ์'});
+    var legendRows = segs.map(function(s){
+      var pct = totalTasks ? Math.round(s.n/totalTasks*100) : 0;
+      return '<div style="display:flex; align-items:center; gap:9px; padding:6px 0;">' +
+        '<span style="width:11px; height:11px; border-radius:3px; background:' + s.c + '; flex-shrink:0;"></span>' +
+        '<span style="flex:1; font-size:13px; color:var(--ink);">' + s.label + '</span>' +
+        '<span class="mono" style="font-size:13px; font-weight:700; color:var(--ink);">' + s.n + '</span>' +
+        '<span class="mono" style="font-size:11.5px; color:var(--ink-faint); min-width:36px; text-align:right;">' + pct + '%</span>' +
+      '</div>';
+    }).join('');
+    statusDonutPanel = '<div class="panel" style="padding:18px 20px; margin-bottom:20px; display:flex; gap:28px; align-items:center; flex-wrap:wrap;">' +
+      donutSvg +
+      '<div style="flex:1; min-width:200px;">' +
+        '<div class="section-label" style="margin-top:0;">สัดส่วนสถานะงานทั้งหมด &middot; ' + totalTasks + ' งาน</div>' +
+        legendRows +
+      '</div>' +
+    '</div>';
+  }
 
   // workload by assignee
   var byAssignee = {};
@@ -1077,9 +1265,47 @@ function renderOverviewView(){
     '</div>';
   }).join('');
 
-  var workloadPanel = '<div class="panel" style="padding:18px 18px 6px 18px;"><div class="section-label" style="margin-top:0;">ภาระงานของแต่ละคน</div>' + wlRows + '</div>';
+  var workloadPanel = totalTasks > 0 ? ('<div class="panel" style="padding:18px 18px 6px 18px;"><div class="section-label" style="margin-top:0;">ภาระงานของแต่ละคน (โปรเจกต์)</div>' + wlRows + '</div>') : '';
 
-  return head + kpis + statusDonutPanel + workloadPanel;
+  var todoPanel = '';
+  if(todos.length > 0){
+    var tNs = todos.filter(function(t){ return t.status==='not_started' && !isTodoOverdue(t); }).length;
+    var tIp = todos.filter(function(t){ return t.status==='in_progress' && !isTodoOverdue(t); }).length;
+    var tDn = todos.filter(function(t){ return t.status==='done'; }).length;
+    var tOd = todos.filter(isTodoOverdue).length;
+    var tTotal = todos.length;
+    var tDoneRate = tTotal ? Math.round(tDn/tTotal*100) : 0;
+    var tDonut = buildDonutSvg([
+      {value:tNs, color:'var(--slate)'},
+      {value:tIp, color:'var(--amber)'},
+      {value:tDn, color:'var(--teal)'},
+      {value:tOd, color:'var(--coral)'}
+    ], {size:120, thickness:17, centerLabel:tDoneRate+'%', centerSub:'เสร็จ'});
+    var tSegs = [
+      {n:tNs, c:'var(--slate)', l:'ยังไม่ได้เริ่ม'},
+      {n:tIp, c:'var(--amber)', l:'กำลังดำเนินการ'},
+      {n:tDn, c:'var(--teal)', l:'เสร็จ'},
+      {n:tOd, c:'var(--coral)', l:'เกินกำหนด'}
+    ];
+    var tLegend = tSegs.map(function(s){
+      var pct = tTotal ? Math.round(s.n/tTotal*100) : 0;
+      return '<div style="display:flex; align-items:center; gap:8px; padding:4px 0;">' +
+        '<span style="width:10px; height:10px; border-radius:3px; background:' + s.c + '; flex-shrink:0;"></span>' +
+        '<span style="flex:1; font-size:12.5px; color:var(--ink);">' + s.l + '</span>' +
+        '<span class="mono" style="font-size:12.5px; font-weight:700;">' + s.n + '</span>' +
+        '<span class="mono" style="font-size:11px; color:var(--ink-faint); min-width:32px; text-align:right;">' + pct + '%</span>' +
+      '</div>';
+    }).join('');
+    todoPanel = '<div class="panel" style="padding:18px 20px; margin-top:20px; display:flex; gap:24px; align-items:center; flex-wrap:wrap;">' +
+      tDonut +
+      '<div style="flex:1; min-width:200px;">' +
+        '<div class="section-label" style="margin-top:0;">สรุป To-Do List &middot; ' + tTotal + ' งาน</div>' +
+        tLegend +
+      '</div>' +
+    '</div>';
+  }
+
+  return head + kpis + statusDonutPanel + workloadPanel + todoPanel;
 }
 
 /* ===================== Modals ===================== */
@@ -1108,12 +1334,7 @@ function projectModalHtml(editId){
     '</div>';
   }).join('');
   var selectedPriority = p && p.priority ? p.priority : 'medium';
-  var prioBtns = PRIORITY_LEVELS.map(function(pr){
-    var sel = pr.id === selectedPriority;
-    return '<div class="priority-btn' + (sel?' selected':'') + '" data-action="select-priority" data-pid="' + pr.id + '" style="color:' + pr.flagColor + '; ' + (sel ? ('background:'+pr.tint+';') : '') + '">' +
-      '&#128681; ' + pr.label.toUpperCase() +
-    '</div>';
-  }).join('');
+  var prioGridHtml = buildOptionGrid('f-project-priority-grid', PRIORITY_LEVELS, selectedPriority, '&#128681;');
 
   return '' +
   '<div class="modal-head"><h3>' + (p ? 'แก้ไขโปรเจกต์' : 'เพิ่มโปรเจกต์ใหม่') + '</h3><button class="modal-close" data-action="close-modal">&times;</button></div>' +
@@ -1127,9 +1348,7 @@ function projectModalHtml(editId){
       '<div class="category-grid" id="f-project-category-grid" data-selected="' + selectedCat + '">' + catCards + '</div>' +
     '</div>' +
     '<div class="field" id="f-category-other-wrap" style="display:' + (selectedCat==='other'?'block':'none') + ';"><label>ระบุกลุ่มงาน (อื่นๆ)</label><input type="text" id="f-project-category-other" value="' + (p?esc(p.categoryOther||''):'') + '" placeholder="พิมพ์ชื่อกลุ่มงานที่ต้องการ"></div>' +
-    '<div class="field"><label>ระดับความสำคัญ</label>' +
-      '<div class="priority-grid" id="f-project-priority-grid" data-selected="' + selectedPriority + '">' + prioBtns + '</div>' +
-    '</div>' +
+    '<div class="field"><label>ระดับความสำคัญ</label>' + prioGridHtml + '</div>' +
     '<div class="field"><label>สีโปรเจกต์</label><div class="swatches" id="f-project-swatches" data-color="' + color + '">' + swatches + '</div></div>' +
     '<div class="field-error" id="f-project-error">กรุณากรอกชื่อโปรเจกต์</div>' +
   '</div>' +
@@ -1308,6 +1527,43 @@ function handleDeleteTask(taskId){
   render();
 }
 
+function handleSaveTodo(editId){
+  var description = document.getElementById('f-todo-desc').value.trim();
+  var assignee = document.getElementById('f-todo-assignee').value.trim();
+  var dueDate = document.getElementById('f-todo-due').value;
+  var urgency = document.getElementById('f-todo-urgency-grid').getAttribute('data-selected');
+  var importance = document.getElementById('f-todo-importance-grid').getAttribute('data-selected');
+  var status = document.getElementById('f-todo-status-grid').getAttribute('data-selected');
+  var errEl = document.getElementById('f-todo-error');
+
+  if(!description || !assignee || !dueDate){
+    errEl.textContent = 'กรุณากรอกข้อมูลให้ครบ: รายละเอียดงาน ผู้รับผิดชอบ และ Due Date';
+    errEl.classList.add('show');
+    return;
+  }
+  errEl.classList.remove('show');
+
+  var todo;
+  if(editId){
+    todo = todoById(editId);
+    if(todo){ todo.description = description; todo.assignee = assignee; todo.dueDate = dueDate; todo.urgency = urgency; todo.importance = importance; todo.status = status; todo.updatedAt = Date.now(); }
+  } else {
+    todo = { id: uid('todo'), description: description, assignee: assignee, dueDate: dueDate, urgency: urgency, importance: importance, status: status, createdAt: Date.now() };
+    todos.push(todo);
+  }
+  pushTodo(todo);
+  closeModal();
+  render();
+}
+
+function handleDeleteTodo(todoId){
+  if(!confirm('ลบงานนี้? การลบนี้ไม่สามารถย้อนกลับได้')) return;
+  todos = todos.filter(function(t){ return t.id !== todoId; });
+  removeTodo(todoId);
+  closeModal();
+  render();
+}
+
 function exportProjectToExcel(pid){
   var p = projectById(pid);
   if(!p) return;
@@ -1450,15 +1706,15 @@ document.addEventListener('click', function(e){
       var otherWrap = document.getElementById('f-category-other-wrap');
       if(otherWrap) otherWrap.style.display = (catId === 'other') ? 'block' : 'none';
       break;
-    case 'select-priority':
-      var pid = el.getAttribute('data-pid');
-      var prioGrid = document.getElementById('f-project-priority-grid');
-      prioGrid.setAttribute('data-selected', pid);
-      Array.prototype.forEach.call(prioGrid.querySelectorAll('.priority-btn'), function(btn){
-        var isSel = btn.getAttribute('data-pid') === pid;
+    case 'select-option':
+      var val = el.getAttribute('data-val');
+      var grid = el.closest('.priority-grid');
+      grid.setAttribute('data-selected', val);
+      Array.prototype.forEach.call(grid.querySelectorAll('.priority-btn'), function(btn){
+        var isSel = btn.getAttribute('data-val') === val;
         btn.classList.toggle('selected', isSel);
-        var info = priorityById(btn.getAttribute('data-pid'));
-        btn.style.background = isSel ? info.tint : '';
+        var tint = btn.getAttribute('data-tint');
+        btn.style.background = isSel ? tint : '';
       });
       break;
     case 'save-project':
@@ -1479,6 +1735,24 @@ document.addEventListener('click', function(e){
       break;
     case 'export-project-excel':
       exportProjectToExcel(id);
+      break;
+    case 'open-todo-modal':
+      openModal(todoModalHtml(id || null));
+      break;
+    case 'save-todo':
+      handleSaveTodo(id || null);
+      break;
+    case 'delete-todo':
+      handleDeleteTodo(id);
+      break;
+    case 'toggle-todo-window':
+      var winKey = el.getAttribute('data-key');
+      todoFilterWindow = (todoFilterWindow === winKey) ? 'all' : winKey;
+      render();
+      break;
+    case 'toggle-todo-status-filter':
+      todoFilterStatus = el.getAttribute('data-key');
+      render();
       break;
     case 'open-task-detail':
       currentTaskId = id;
@@ -1565,6 +1839,13 @@ document.addEventListener('change', function(e){
   }
   if(action === 'filter-project-priority'){
     projectFilterPriority = e.target.value;
+    render();
+    return;
+  }
+  if(action === 'todo-status-select'){
+    var todoId = e.target.getAttribute('data-id');
+    var td = todoById(todoId);
+    if(td){ td.status = e.target.value; td.updatedAt = Date.now(); pushTodo(td); }
     render();
     return;
   }
