@@ -156,6 +156,19 @@ table.tk tr.task-row:hover{background:#FAFCFD;}
 .task-title{font-weight:600; color:var(--ink);}
 .task-meta{font-size:11.5px; color:var(--ink-faint); margin-top:2px;}
 
+/* Todo table: fixed layout so both tables share identical column widths */
+table.tk-todo{table-layout:fixed;}
+table.tk-todo col.col-desc{width:32%;}
+table.tk-todo col.col-assignee{width:11%;}
+table.tk-todo col.col-due{width:10%;}
+table.tk-todo col.col-urg{width:9%;}
+table.tk-todo col.col-imp{width:9%;}
+table.tk-todo col.col-status{width:12%;}
+table.tk-todo col.col-note{width:8%;}
+table.tk-todo col.col-del{width:9%;}
+table.tk-todo td.col-desc-cell{white-space:normal; word-break:break-word;}
+table.tk-todo td{white-space:nowrap; vertical-align:middle;}
+
 .badge{
   display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600; padding:4px 9px;
   border-radius:20px; white-space:nowrap;
@@ -1226,7 +1239,7 @@ function renderTodosView(){
       (latestN ? '<div class="task-meta" style="color:var(--ink-faint); margin-top:3px;">&#128172; ' + esc(truncate(latestN.text, 60)) + '</div>' : '');
 
     var mainRow = '<tr class="task-row ' + rowCls + '" data-action="open-todo-modal" data-id="' + t.id + '">' +
-      '<td>' + descCell + '</td>' +
+      '<td class="col-desc-cell">' + descCell + '</td>' +
       '<td>' + esc(t.assignee) + '</td>' +
       '<td class="mono">' + fmtDateThai(t.dueDate) + '</td>' +
       '<td><span class="badge ' + urg.cls + '">' + urg.label + '</span></td>' +
@@ -1242,10 +1255,15 @@ function renderTodosView(){
   var activeItems = sorted.filter(function(t){ return t.status !== 'done'; });
   var doneItems = sorted.filter(function(t){ return t.status === 'done'; });
 
+  var colgroup = '<colgroup>' +
+    '<col class="col-desc"><col class="col-assignee"><col class="col-due">' +
+    '<col class="col-urg"><col class="col-imp"><col class="col-status">' +
+    '<col class="col-note"><col class="col-del">' +
+  '</colgroup>';
   var thead = '<thead><tr><th>รายละเอียดงาน</th><th>ผู้รับผิดชอบ</th><th>Due Date</th><th>ความเร่งด่วน</th><th>ความสำคัญ</th><th>สถานะ</th><th>บันทึก</th><th></th></tr></thead>';
 
   var activeTable = activeItems.length > 0
-    ? '<div class="panel"><div class="table-wrap"><table class="tk">' + thead + '<tbody>' + activeItems.map(function(t){ return buildTodoRow(t, false); }).join('') + '</tbody></table></div></div>'
+    ? '<div class="panel"><div class="table-wrap"><table class="tk tk-todo">' + colgroup + thead + '<tbody>' + activeItems.map(function(t){ return buildTodoRow(t, false); }).join('') + '</tbody></table></div></div>'
     : '<div class="empty-state" style="padding:28px 24px;">' +
         '<div class="es-icon">&#9989;</div>' +
         '<div class="es-title">ไม่มีงานที่ค้างอยู่</div>' +
@@ -1257,7 +1275,7 @@ function renderTodosView(){
     doneSection = '<div style="margin-top:20px;">' +
       '<div class="section-label" style="color:var(--teal);">&#10003; งานที่เสร็จแล้ว &middot; ' + doneItems.length + ' รายการ</div>' +
       '<div class="panel" style="opacity:0.88;">' +
-        '<div class="table-wrap"><table class="tk">' + thead + '<tbody>' + doneItems.map(function(t){ return buildTodoRow(t, true); }).join('') + '</tbody></table></div>' +
+        '<div class="table-wrap"><table class="tk tk-todo">' + colgroup + thead + '<tbody>' + doneItems.map(function(t){ return buildTodoRow(t, true); }).join('') + '</tbody></table></div>' +
       '</div>' +
     '</div>';
   }
