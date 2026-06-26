@@ -2013,6 +2013,7 @@ document.addEventListener('input', function(e){
 });
 
 document.addEventListener('click', function(e){
+  var overlay = e.target.classList && e.target.classList.contains('modal-overlay');
   if(overlay){ closeModal(); return; }
 
   var el = e.target.closest('[data-action]');
