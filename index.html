@@ -1055,29 +1055,49 @@ function renderProjectDetail(){
     '</div>';
   }
 
-  var rows = pt.map(function(t){
+  var buildTaskRow = function(t){
     var s = statusInfo(t);
-    var note = latestNote(t);
-    return '<tr class="task-row" data-action="open-task-detail" data-id="' + t.id + '">' +
-      '<td><div class="task-title">' + esc(t.title) + '</div>' + (note ? '<div class="task-meta">&#128172; ' + esc(truncate(note.text, 70)) + '</div>' : '') + '</td>' +
+    var actInfo = lastActivityInfo(t);
+    var dueInfo = dueRemainingInfo(t);
+    var lastN = latestNote(t);
+    var rowCls = isOverdue(t) ? 'todo-row-overdue' : (Number(t.progress) === 100 ? 'todo-row-done' : (Number(t.progress) > 0 ? 'todo-row-inprogress' : ''));
+    return '<tr class="task-row ' + rowCls + '" data-action="open-task-detail" data-id="' + t.id + '">' +
+      '<td class="col-desc-cell"><div class="task-title">' + esc(t.title) + '</div>' +
+        (lastN ? '<div class="task-meta">&#128172; ' + esc(truncate(lastN.text, 70)) + '</div>' : '') +
+        '<div class="last-act' + (actInfo.stale ? ' stale' : '') + '" style="margin-top:4px;"><span class="dot"></span>' + actInfo.label + '</div>' +
+      '</td>' +
       '<td>' + esc(t.assignee) + '</td>' +
       '<td class="mono">' + fmtDateThai(t.startDate) + '</td>' +
-      '<td class="mono">' + fmtDateThai(t.dueDate) + '</td>' +
+      '<td><div class="mono">' + fmtDateThai(t.dueDate) + '</div>' + (dueInfo ? '<div style="margin-top:3px;"><span class="due-pill ' + dueInfo.cls + '">' + dueInfo.label + '</span></div>' : '') + '</td>' +
       '<td><div style="display:flex; align-items:center; gap:8px;"><div class="progress-track"><div class="progress-fill" style="width:' + t.progress + '%; background:' + s.color + '"></div></div><span class="mono" style="font-size:12px;">' + t.progress + '%</span></div></td>' +
       '<td><span class="badge ' + s.cls + '">' + s.label + '</span></td>' +
       '<td><button class="btn btn-danger btn-sm" data-action="delete-task" data-id="' + t.id + '" data-stop="1">ลบ</button></td>' +
     '</tr>';
-  }).join('');
+  };
+
+  // Active first (sorted by due date), done at the bottom
+  var activeTasks = pt.filter(function(t){ return Number(t.progress) !== 100; })
+    .slice().sort(function(a,b){ return (a.dueDate||'9999').localeCompare(b.dueDate||'9999'); });
+  var doneTasks = pt.filter(function(t){ return Number(t.progress) === 100; })
+    .slice().sort(function(a,b){ return (a.dueDate||'9999').localeCompare(b.dueDate||'9999'); });
+
+  var theadHtml = '<thead><tr><th>งาน</th><th>ผู้รับผิดชอบ</th><th>เริ่ม</th><th>กำหนดส่ง</th><th>ความคืบหน้า</th><th>สถานะ</th><th></th></tr></thead>';
+
+  var activeTableHtml = activeTasks.length > 0
+    ? '<div class="panel"><div class="table-wrap"><table class="tk">' + theadHtml + '<tbody>' + activeTasks.map(buildTaskRow).join('') + '</tbody></table></div></div>'
+    : '<div class="empty-state" style="padding:24px;"><div class="es-icon">&#9989;</div><div class="es-title">งานทั้งหมดเสร็จสมบูรณ์แล้ว</div></div>';
+
+  var doneTableHtml = doneTasks.length > 0
+    ? '<div style="margin-top:18px;"><div class="section-label" style="color:var(--teal);">&#10003; งานที่เสร็จแล้ว &middot; ' + doneTasks.length + ' รายการ</div>' +
+        '<div class="panel" style="opacity:0.88;"><div class="table-wrap"><table class="tk">' + theadHtml + '<tbody>' + doneTasks.map(buildTaskRow).join('') + '</tbody></table></div></div></div>'
+    : '';
 
   var ganttPanel = '<div class="panel" style="padding:16px 18px; margin-top:20px;">' +
     '<div class="section-label" style="margin-top:0; font-size:14px;">แผนภูมิแกนต์ — ' + esc(p.name) + '</div>' +
     renderGanttSection(p.id) +
   '</div>';
 
-  return head + '<div class="panel"><div class="table-wrap"><table class="tk">' +
-    '<thead><tr><th>งาน</th><th>ผู้รับผิดชอบ</th><th>เริ่ม</th><th>กำหนดส่ง</th><th>ความคืบหน้า</th><th>สถานะ</th><th></th></tr></thead>' +
-    '<tbody>' + rows + '</tbody>' +
-  '</table></div></div>' + ganttPanel;
+  return head + activeTableHtml + doneTableHtml + ganttPanel;
 }
 
 /* ===================== Gantt (embedded in home page) ===================== */
