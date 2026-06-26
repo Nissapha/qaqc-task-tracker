@@ -1951,19 +1951,33 @@ function exportProjectGantt(pid){
     var timeline = wrap.querySelector('.gantt-timeline');
     if(!scroll || !timeline){ alert('ไม่พบตาราง Gantt'); return; }
 
-    // Temporarily expand the scroll container so the full timeline width is visible (no clipping)
-    var fullW = timeline.scrollWidth;
-    var prevScrollOverflow = scroll.style.overflow;
-    var prevScrollWidth = scroll.style.width;
-    var prevWrapWidth = wrap.style.width;
-    scroll.style.overflow = 'visible';
-    scroll.style.width = fullW + 'px';
-    wrap.style.width = (wrap.querySelector('.gantt-labels').offsetWidth + fullW) + 'px';
+    // ---- Collect elements we will temporarily modify, with their original inline styles ----
+    var modified = []; // {el, prop, prev}
+    var setStyle = function(el, prop, val){ if(!el) return; modified.push({el:el, prop:prop, prev:el.style[prop]}); el.style[prop] = val; };
 
+    // 1) Expand scroll container so the full timeline width is captured (no clipping)
+    var fullW = timeline.scrollWidth;
+    var labelsW = wrap.querySelector('.gantt-labels') ? wrap.querySelector('.gantt-labels').offsetWidth : 0;
+    setStyle(scroll, 'overflow', 'visible');
+    setStyle(scroll, 'width', fullW + 'px');
+    setStyle(wrap, 'width', (labelsW + fullW) + 'px');
+
+    // 2) Hide the "today" vertical line + label
+    var todayLine = wrap.querySelector('.gantt-today-line');
+    var todayLabel = wrap.querySelector('.gantt-today-label');
+    setStyle(todayLine, 'display', 'none');
+    setStyle(todayLabel, 'display', 'none');
+
+    // 3) Replace striped overrun gradient (html2canvas can't render repeating-linear-gradient) with solid coral
+    var overruns = wrap.querySelectorAll('.gantt-overrun');
+    for(var oi=0; oi<overruns.length; oi++){
+      setStyle(overruns[oi], 'background', '#D9614F');
+      setStyle(overruns[oi], 'backgroundImage', 'none');
+    }
+
+    // 4) Capture gantt, then compose a legend bar on top of the resulting canvas
     var restore = function(){
-      scroll.style.overflow = prevScrollOverflow;
-      scroll.style.width = prevScrollWidth;
-      wrap.style.width = prevWrapWidth;
+      for(var i=modified.length-1; i>=0; i--){ modified[i].el.style[modified[i].prop] = modified[i].prev; }
     };
 
     html2canvas(wrap, {
@@ -1977,12 +1991,74 @@ function exportProjectGantt(pid){
       height: wrap.scrollHeight,
       windowWidth: wrap.scrollWidth + 120,
       windowHeight: wrap.scrollHeight + 120
-    }).then(function(canvas){
+    }).then(function(ganttCanvas){
       restore();
+
+      // Compose final canvas: legend header + title on top, gantt below
+      var SCALE = 2;
+      var legendH = 52 * SCALE;
+      var gw = ganttCanvas.width;
+      var gh = ganttCanvas.height;
+      var out = document.createElement('canvas');
+      out.width = gw;
+      out.height = gh + legendH;
+      var cx = out.getContext('2d');
+
+      // white background
+      cx.fillStyle = '#FFFFFF';
+      cx.fillRect(0, 0, out.width, out.height);
+
+      // legend bar
+      var padX = 18 * SCALE;
+      var fontPx = 14 * SCALE;
+      var cy = legendH / 2;
+      // project title
+      cx.textBaseline = 'middle';
+      cx.font = '700 ' + fontPx + 'px \"IBM Plex Sans\", Arial, sans-serif';
+      cx.fillStyle = '#1C2733';
+      var titleText = p.name;
+      cx.fillText(titleText, padX, cy);
+      var cursorX = padX + cx.measureText(titleText).width + 28 * SCALE;
+
+      var legendItems = [
+        {c:'#7C8DA0', t:'ยังไม่ได้เริ่ม'},
+        {c:'#E8954B', t:'กำลังดำเนินการ'},
+        {c:'#2A9D8F', t:'เสร็จสมบูรณ์'},
+        {c:'#D9614F', t:'เกินกำหนด'}
+      ];
+      var boxSz = 13 * SCALE;
+      cx.font = '500 ' + (12.5 * SCALE) + 'px \"IBM Plex Sans\", Arial, sans-serif';
+      legendItems.forEach(function(it){
+        cx.fillStyle = it.c;
+        roundRect(cx, cursorX, cy - boxSz/2, boxSz, boxSz, 3 * SCALE);
+        cx.fill();
+        cursorX += boxSz + 7 * SCALE;
+        cx.fillStyle = '#46586A';
+        cx.fillText(it.t, cursorX, cy);
+        cursorX += cx.measureText(it.t).width + 22 * SCALE;
+      });
+      // export date (right aligned)
+      cx.font = '400 ' + (11.5 * SCALE) + 'px \"IBM Plex Sans\", Arial, sans-serif';
+      cx.fillStyle = '#94A2AF';
+      cx.textAlign = 'right';
+      cx.fillText('ส่งออก ' + fmtDateThai(todayStr()), gw - padX, cy);
+      cx.textAlign = 'left';
+
+      // divider under legend
+      cx.strokeStyle = '#E3EAF0';
+      cx.lineWidth = 1 * SCALE;
+      cx.beginPath();
+      cx.moveTo(0, legendH - 0.5 * SCALE);
+      cx.lineTo(gw, legendH - 0.5 * SCALE);
+      cx.stroke();
+
+      // draw the gantt below
+      cx.drawImage(ganttCanvas, 0, legendH);
+
       var safeName = p.name.replace(/[^a-zA-Z0-9\u0e00-\u0e7f_\- ]+/g, '_').trim() || 'project';
       var link = document.createElement('a');
       link.download = 'QAQC_' + safeName + '_' + todayStr() + '_Gantt.png';
-      link.href = canvas.toDataURL('image/png');
+      link.href = out.toDataURL('image/png');
       link.click();
     }).catch(function(err){
       restore();
@@ -1990,6 +2066,17 @@ function exportProjectGantt(pid){
       alert('เกิดข้อผิดพลาดในการสร้างรูปภาพ Gantt chart กรุณาลองใหม่อีกครั้ง');
     });
   }, needFit ? 450 : 250);
+}
+
+// Helper: rounded rectangle path for canvas
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
 
 /* ===================== Event delegation ===================== */
