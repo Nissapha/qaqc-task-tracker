@@ -1962,11 +1962,9 @@ function exportProjectGantt(pid){
     setStyle(scroll, 'width', fullW + 'px');
     setStyle(wrap, 'width', (labelsW + fullW) + 'px');
 
-    // 2) Hide the "today" vertical line + label
-    var todayLine = wrap.querySelector('.gantt-today-line');
-    var todayLabel = wrap.querySelector('.gantt-today-label');
-    setStyle(todayLine, 'display', 'none');
-    setStyle(todayLabel, 'display', 'none');
+    // 2) Hide the "today" vertical line(s) + label(s) — rendered in both tick-row and body-rows
+    var todayEls = wrap.querySelectorAll('.gantt-today-line, .gantt-today-label');
+    for(var ti=0; ti<todayEls.length; ti++){ setStyle(todayEls[ti], 'display', 'none'); }
 
     // 3) Replace striped overrun gradient (html2canvas can't render repeating-linear-gradient) with solid coral
     var overruns = wrap.querySelectorAll('.gantt-overrun');
