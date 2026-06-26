@@ -242,15 +242,16 @@ table.tk-todo td{white-space:nowrap; vertical-align:middle;}
 
 .todo-status-select{padding:5px 8px; border:1px solid var(--line); border-radius:7px; font-size:12px; font-family:'IBM Plex Sans'; background:var(--panel); cursor:pointer; font-weight:600;}
 /* Todo row highlight by status */
-table.tk tr.todo-row-done td{background:rgba(42,157,143,0.07);}
-table.tk tr.todo-row-done:hover td{background:rgba(42,157,143,0.13);}
-table.tk tr.todo-row-inprogress td{background:rgba(232,149,75,0.07);}
-table.tk tr.todo-row-inprogress:hover td{background:rgba(232,149,75,0.13);}
-table.tk tr.todo-row-overdue td{background:rgba(217,97,79,0.07);}
-table.tk tr.todo-row-overdue:hover td{background:rgba(217,97,79,0.13);}
-table.tk tr.todo-row-done td:first-child{border-left:3px solid var(--teal);}
-table.tk tr.todo-row-inprogress td:first-child{border-left:3px solid var(--amber);}
-table.tk tr.todo-row-overdue td:first-child{border-left:3px solid var(--coral);}
+table.tk tr.todo-row-done td{background:rgba(42,157,143,0.13);}
+table.tk tr.todo-row-done:hover td{background:rgba(42,157,143,0.21);}
+table.tk tr.todo-row-inprogress td{background:rgba(232,149,75,0.13);}
+table.tk tr.todo-row-inprogress:hover td{background:rgba(232,149,75,0.21);}
+table.tk tr.todo-row-overdue td{background:rgba(217,97,79,0.13);}
+table.tk tr.todo-row-overdue:hover td{background:rgba(217,97,79,0.21);}
+table.tk tr.todo-row-done td:first-child{border-left:4px solid var(--teal);}
+table.tk tr.todo-row-inprogress td:first-child{border-left:4px solid var(--amber);}
+table.tk tr.todo-row-overdue td:first-child{border-left:4px solid var(--coral);}
+.todo-search-bar{display:flex; align-items:center; gap:8px; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:8px 14px; margin-bottom:14px;}
 /* Todo inline notes expand */
 .todo-notes-expand{padding:10px 16px 14px 16px; background:#FAFCFD; border-top:1px solid var(--line-soft);}
 .todo-notes-list{display:flex; flex-direction:column; gap:8px; margin-bottom:10px; max-height:160px; overflow-y:auto;}
@@ -406,6 +407,7 @@ var currentProjectId = null;
 var currentTaskId = null;
 var todoFilterWindow = 'all'; // 'all' | 'today' | 'week' | 'month' | 'overdue'
 var todoFilterStatus = 'all';
+var todoFilterAssignee = '';
 var ganttFilterProject = 'all';
 var ganttRangeStart = null; // 'YYYY-MM-DD' or null = auto-fit
 var ganttRangeEnd = null;
@@ -1220,12 +1222,19 @@ function renderTodosView(){
     TODO_STATUSES.map(function(s){ return statusChip(s.id, s.label); }).join('') +
   '</div>';
 
+  var searchBar = '<div class="todo-search-bar">' +
+    '<span style="font-size:14px; color:var(--ink-faint);">&#128269;</span>' +
+    '<input type="text" id="todo-assignee-search" value="' + esc(todoFilterAssignee) + '" placeholder="ค้นหาผู้รับผิดชอบ..." style="flex:1; border:none; outline:none; font-size:13px; font-family:\'IBM Plex Sans\'; background:transparent; color:var(--ink);">' +
+    (todoFilterAssignee ? '<button class="btn btn-ghost btn-sm" data-action="clear-todo-assignee" style="padding:3px 8px; font-size:11px;">✕ ล้าง</button>' : '') +
+  '</div>';
+
   var filtered = todos.filter(function(t){
     if(todoFilterStatus !== 'all' && t.status !== todoFilterStatus) return false;
     if(todoFilterWindow === 'today' && t.dueDate !== todayS) return false;
     if(todoFilterWindow === 'week' && !(t.dueDate >= weekStartS && t.dueDate <= weekEndS)) return false;
     if(todoFilterWindow === 'month' && !(t.dueDate >= monthStartS && t.dueDate <= monthEndS)) return false;
     if(todoFilterWindow === 'overdue' && !isTodoOverdue(t)) return false;
+    if(todoFilterAssignee && (!t.assignee || t.assignee.toLowerCase().indexOf(todoFilterAssignee.toLowerCase()) === -1)) return false;
     return true;
   });
   var sorted = sortByDueDateTodo(filtered);
@@ -1319,7 +1328,7 @@ function renderTodosView(){
     '</div>';
   }
 
-  return head + filterBoxes + statusChips + activeTable + doneSection;
+  return head + filterBoxes + statusChips + searchBar + activeTable + doneSection;
 }
 
 function todoModalHtml(editId){
@@ -1791,7 +1800,7 @@ function exportProjectToExcel(pid){
   var pt = sortByStartDate(tasksOfProject(pid));
   if(!pt.length){ alert('โปรเจกต์นี้ยังไม่มีงานให้ export'); return; }
 
-  // Sheet 1: task data
+  /* ── Sheet 1: task data ── */
   var dataRows = [['ลำดับ','ชื่องาน','ผู้รับผิดชอบ','วันเริ่มต้น','วันกำหนดส่ง','ระยะเวลา (วัน)','ความคืบหน้า (%)','สถานะ','เกินกำหนด (วัน)','บันทึกล่าสุด']];
   pt.forEach(function(t, idx){
     var s = statusInfo(t);
@@ -1802,7 +1811,7 @@ function exportProjectToExcel(pid){
   var ws1 = XLSX.utils.aoa_to_sheet(dataRows);
   ws1['!cols'] = [{wch:5},{wch:34},{wch:16},{wch:12},{wch:12},{wch:11},{wch:12},{wch:15},{wch:11},{wch:42}];
 
-  // Sheet 2: text-based Gantt grid (day columns), guaranteed to render without relying on cell-color support
+  /* ── Sheet 2: text Gantt grid ── */
   var validTasks = pt.filter(function(t){ return t.startDate && t.dueDate; });
   var ganttRows = [['โปรเจกต์: ' + p.name + '   (ส่งออกเมื่อ ' + fmtDateThai(todayStr()) + ')']];
   if(validTasks.length){
@@ -1849,7 +1858,7 @@ function exportProjectToExcel(pid){
       ganttRows.push(row);
     });
     ganttRows.push([]);
-    ganttRows.push(['สัญลักษณ์:  \u25A0 = ดำเนินการแล้ว (ตามสัดส่วน % ที่บันทึก)    \u25A2 = ตามแผน (ยังไม่ถึง)    \u2715 = เกินกำหนด    [ ] = วันนี้']);
+    ganttRows.push(['สัญลักษณ์:  \u25A0 = ดำเนินการแล้ว    \u25A2 = ตามแผน (ยังไม่ถึง)    \u2715 = เกินกำหนด    [ ] = วันนี้']);
   } else {
     ganttRows.push(['ไม่มีงานที่มีวันเริ่มต้นและวันกำหนดส่งครบถ้วนสำหรับสร้างแผนภูมิ']);
   }
@@ -1861,14 +1870,148 @@ function exportProjectToExcel(pid){
 
   var wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws1, 'ข้อมูลงาน');
-  XLSX.utils.book_append_sheet(wb, ws2, 'Gantt Chart');
+  XLSX.utils.book_append_sheet(wb, ws2, 'Gantt Chart (Text)');
 
   var safeName = p.name.replace(/[^a-zA-Z0-9ก-๙_\- ]+/g, '_').trim() || 'project';
-  XLSX.writeFile(wb, 'QAQC_' + safeName + '_' + todayStr() + '.xlsx');
+  var fileBase = 'QAQC_' + safeName + '_' + todayStr();
+  XLSX.writeFile(wb, fileBase + '.xlsx');
+
+  /* ── Gantt PNG: render to hidden canvas then download ── */
+  if(!validTasks.length) return;
+  try {
+    var CELL_H = 28, LEFT_W = 260, ASSIGNEE_W = 110, PCT_W = 60, DAY_W = 22, HDR_H = 46, TITLE_H = 36, PAD = 16;
+    var totalDays2 = dayDiff(minS, (maxE > todayD ? maxE : todayD)) + 1;
+    var cw = LEFT_W + ASSIGNEE_W + PCT_W + DAY_W * totalDays2 + PAD * 2;
+    var ch = TITLE_H + HDR_H + validTasks.length * CELL_H + PAD * 2 + 28;
+    var cv = document.createElement('canvas');
+    cv.width = cw; cv.height = ch;
+    var ctx = cv.getContext('2d');
+
+    // background
+    ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, cw, ch);
+
+    // title
+    ctx.fillStyle = '#1E293B'; ctx.font = 'bold 14px IBM Plex Sans, Arial';
+    ctx.fillText('Gantt Chart — ' + p.name, PAD, PAD + 20);
+    ctx.fillStyle = '#64748B'; ctx.font = '11px IBM Plex Sans, Arial';
+    ctx.fillText('Export: ' + fmtDateThai(todayStr()), PAD, PAD + 36);
+
+    var y0 = TITLE_H + PAD;
+    var x0 = PAD;
+
+    // header row bg
+    ctx.fillStyle = '#F1F5F9';
+    ctx.fillRect(x0, y0, cw - PAD*2, HDR_H);
+
+    // month/day headers
+    ctx.fillStyle = '#475569'; ctx.font = 'bold 10px IBM Plex Sans, Arial';
+    ctx.fillText('งาน', x0 + 6, y0 + 15);
+    ctx.fillText('ผู้รับผิดชอบ', x0 + LEFT_W + 4, y0 + 15);
+    ctx.fillText('%', x0 + LEFT_W + ASSIGNEE_W + 6, y0 + 15);
+
+    for(var di=0; di<totalDays2; di++){
+      var dd2 = addDays(minS, di);
+      var dx = x0 + LEFT_W + ASSIGNEE_W + PCT_W + di * DAY_W;
+      if(di === 0 || dd2.getDate() === 1){
+        ctx.fillStyle = '#334155'; ctx.font = 'bold 9px IBM Plex Sans, Arial';
+        ctx.fillText(fmtMonthYearShort(dd2), dx + 1, y0 + 14);
+      }
+      // day number
+      var isToday = toDateStr(dd2) === todayStr();
+      ctx.fillStyle = isToday ? '#DC2626' : (dd2.getDay()===0||dd2.getDay()===6 ? '#94A3B8' : '#475569');
+      ctx.font = (isToday ? 'bold ' : '') + '9px IBM Plex Sans, Arial';
+      ctx.fillText(String(dd2.getDate()), dx + (dd2.getDate() < 10 ? 7 : 4), y0 + 30);
+    }
+
+    // task rows
+    validTasks.forEach(function(t, ri){
+      var ry = y0 + HDR_H + ri * CELL_H;
+      // alternating bg
+      ctx.fillStyle = ri % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
+      ctx.fillRect(x0, ry, cw - PAD*2, CELL_H);
+
+      // task name
+      var s = statusInfo(t);
+      var dotColor = s.color;
+      ctx.fillStyle = dotColor; ctx.beginPath(); ctx.arc(x0 + 8, ry + CELL_H/2, 4, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#1E293B'; ctx.font = '11px IBM Plex Sans, Arial';
+      var title = t.title.length > 28 ? t.title.slice(0,27)+'…' : t.title;
+      ctx.fillText(title, x0 + 18, ry + CELL_H/2 + 4);
+
+      // assignee
+      ctx.fillStyle = '#475569'; ctx.font = '10px IBM Plex Sans, Arial';
+      var asgn = (t.assignee||'').length > 14 ? (t.assignee||'').slice(0,13)+'…' : (t.assignee||'');
+      ctx.fillText(asgn, x0 + LEFT_W + 4, ry + CELL_H/2 + 4);
+
+      // progress
+      ctx.fillStyle = '#64748B'; ctx.font = '10px IBM Plex Sans, Arial';
+      ctx.fillText(t.progress + '%', x0 + LEFT_W + ASSIGNEE_W + 6, ry + CELL_H/2 + 4);
+
+      // bars
+      var ts2 = parseDateStr(t.startDate), te2 = parseDateStr(t.dueDate);
+      var totalTaskDays2 = dayDiff(ts2, te2) + 1;
+      var completedDays2 = Math.round(totalTaskDays2 * Number(t.progress) / 100);
+      var barY = ry + 7, barH = CELL_H - 14;
+
+      for(var di2=0; di2<totalDays2; di2++){
+        var dd3 = addDays(minS, di2);
+        var ds2 = toDateStr(dd3);
+        var bx = x0 + LEFT_W + ASSIGNEE_W + PCT_W + di2 * DAY_W;
+        if(ds2 >= t.startDate && ds2 <= t.dueDate){
+          var dayIdx2 = dayDiff(ts2, dd3);
+          if(dayIdx2 < completedDays2){
+            ctx.fillStyle = dotColor; ctx.globalAlpha = 0.85;
+          } else {
+            ctx.fillStyle = dotColor; ctx.globalAlpha = 0.25;
+          }
+          ctx.fillRect(bx + 1, barY, DAY_W - 2, barH);
+          ctx.globalAlpha = 1;
+        } else if(isOverdue(t) && ds2 > t.dueDate && ds2 <= todayStr()){
+          ctx.fillStyle = '#DC2626'; ctx.globalAlpha = 0.3;
+          ctx.fillRect(bx + 1, barY, DAY_W - 2, barH);
+          ctx.globalAlpha = 1;
+        }
+        // today line
+        if(toDateStr(dd3) === todayStr()){
+          ctx.strokeStyle = '#DC2626'; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.7;
+          ctx.beginPath(); ctx.moveTo(bx + DAY_W/2, y0 + HDR_H); ctx.lineTo(bx + DAY_W/2, y0 + HDR_H + validTasks.length * CELL_H); ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+      }
+      // row bottom border
+      ctx.strokeStyle = '#E2E8F0'; ctx.lineWidth = 0.5; ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.moveTo(x0, ry + CELL_H); ctx.lineTo(x0 + cw - PAD*2, ry + CELL_H); ctx.stroke();
+    });
+
+    // legend
+    var ly = y0 + HDR_H + validTasks.length * CELL_H + 8;
+    ctx.fillStyle = '#94A3B8'; ctx.font = '10px IBM Plex Sans, Arial';
+    ctx.fillText('■ ดำเนินการแล้ว (ตามสัดส่วน %)   □ ตามแผน   ▪ เกินกำหนด   | = วันนี้', x0 + 4, ly + 14);
+
+    // outer border
+    ctx.strokeStyle = '#CBD5E1'; ctx.lineWidth = 1;
+    ctx.strokeRect(x0, y0, cw - PAD*2, HDR_H + validTasks.length * CELL_H);
+
+    // download PNG
+    var link = document.createElement('a');
+    link.download = fileBase + '_Gantt.png';
+    link.href = cv.toDataURL('image/png');
+    link.click();
+  } catch(err){
+    console.warn('Gantt PNG render failed:', err);
+  }
 }
 
 /* ===================== Event delegation ===================== */
-document.addEventListener('click', function(e){
+document.addEventListener('input', function(e){
+  if(e.target && e.target.id === 'todo-assignee-search'){
+    todoFilterAssignee = e.target.value;
+    render();
+    // restore focus after render
+    var el = document.getElementById('todo-assignee-search');
+    if(el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+  }
+});
   var overlay = e.target.classList && e.target.classList.contains('modal-overlay');
   if(overlay){ closeModal(); return; }
 
@@ -1973,7 +2116,10 @@ document.addEventListener('click', function(e){
       e.stopPropagation();
       handleAddTodoNote(id);
       break;
-    case 'toggle-todo-window':
+    case 'clear-todo-assignee':
+      todoFilterAssignee = '';
+      render();
+      break;
       var winKey = el.getAttribute('data-key');
       todoFilterWindow = (todoFilterWindow === winKey) ? 'all' : winKey;
       render();
