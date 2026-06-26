@@ -1240,10 +1240,11 @@ function renderTodosView(){
   var sorted = sortByDueDateTodo(filtered);
 
   if(sorted.length === 0){
-    return head + filterBoxes + statusChips + '<div class="empty-state">' +
+    return head + filterBoxes + statusChips + searchBar + '<div class="empty-state">' +
       '<div class="es-icon">&#128269;</div>' +
       '<div class="es-title">ไม่พบงานตามตัวกรองที่เลือก</div>' +
       '<div class="es-sub">ลองเปลี่ยนหรือล้างตัวกรองดู</div>' +
+      (todoFilterAssignee ? '<button class="btn btn-ghost btn-sm" data-action="clear-todo-assignee" style="margin-top:8px;">✕ ล้างคำค้นหา "' + esc(todoFilterAssignee) + '"</button>' : '') +
     '</div>';
   }
 
@@ -2003,12 +2004,17 @@ function exportProjectToExcel(pid){
 }
 
 /* ===================== Event delegation ===================== */
+var todoSearchDebounce = null;
 document.addEventListener('input', function(e){
   if(e.target && e.target.id === 'todo-assignee-search'){
     todoFilterAssignee = e.target.value;
-    render();
-    var el = document.getElementById('todo-assignee-search');
-    if(el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+    var cursorPos = e.target.selectionStart;
+    if(todoSearchDebounce) clearTimeout(todoSearchDebounce);
+    todoSearchDebounce = setTimeout(function(){
+      render();
+      var el = document.getElementById('todo-assignee-search');
+      if(el){ el.focus(); try{ el.setSelectionRange(cursorPos, cursorPos); }catch(_){ } }
+    }, 220);
   }
 });
 
@@ -2121,6 +2127,7 @@ document.addEventListener('click', function(e){
       todoFilterAssignee = '';
       render();
       break;
+    case 'toggle-todo-window':
       var winKey = el.getAttribute('data-key');
       todoFilterWindow = (todoFilterWindow === winKey) ? 'all' : winKey;
       render();
