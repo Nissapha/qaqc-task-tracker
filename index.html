@@ -252,6 +252,13 @@ table.tk tr.todo-row-done td:first-child{border-left:4px solid var(--teal);}
 table.tk tr.todo-row-inprogress td:first-child{border-left:4px solid var(--amber);}
 table.tk tr.todo-row-overdue td:first-child{border-left:4px solid var(--coral);}
 .todo-search-bar{display:flex; align-items:center; gap:8px; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:8px 14px; margin-bottom:14px;}
+.ov-period-bar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:18px;}
+.ov-period-caption{font-size:12.5px; color:var(--ink-soft); font-weight:600;}
+.ov-period-btn{padding:7px 16px; border:1px solid var(--line); border-radius:8px; background:var(--panel); font-size:13px; font-weight:600; font-family:'IBM Plex Sans'; color:var(--ink-soft); cursor:pointer; transition:all .12s;}
+.ov-period-btn:hover{border-color:var(--navy); color:var(--navy);}
+.ov-period-btn.active{background:var(--navy); border-color:var(--navy); color:#fff;}
+.ov-period-now{font-size:12px; color:var(--ink-faint); margin-left:4px;}
+.ov-period-now b{color:var(--navy);}
 /* Todo inline notes expand */
 .todo-notes-expand{padding:10px 16px 14px 16px; background:#FAFCFD; border-top:1px solid var(--line-soft);}
 .todo-notes-list{display:flex; flex-direction:column; gap:8px; margin-bottom:10px; max-height:160px; overflow-y:auto;}
@@ -409,6 +416,7 @@ var todoFilterWindow = 'all'; // 'all' | 'today' | 'week' | 'month' | 'overdue'
 var todoFilterStatus = 'all';
 var todoFilterAssignee = '';
 var ganttFilterProject = 'all';
+var overviewPeriod = 'all'; // 'all' | 'month' | 'year' — filters overview by Due Date
 var ganttRangeStart = null; // 'YYYY-MM-DD' or null = auto-fit
 var ganttRangeEnd = null;
 var ganttZoomMode = 'custom'; // 'month' | 'week' | 'custom'
@@ -1363,22 +1371,48 @@ function renderOverviewView(){
       '<div><div class="page-title">ภาพรวมและภาระงาน</div><div class="page-desc">สรุปสถานะงานทั้งหมด (โปรเจกต์ + To-Do) และภาระงานของแต่ละคน</div></div>' +
     '</div>';
 
+  // --- Period filter by Due Date ---
+  var nowOv = new Date();
+  var curMonthPrefix = nowOv.getFullYear() + '-' + ('0' + (nowOv.getMonth()+1)).slice(-2); // 'YYYY-MM'
+  var curYearPrefix = String(nowOv.getFullYear()); // 'YYYY'
+  var inPeriod = function(item){
+    if(overviewPeriod === 'all') return true;
+    if(!item.dueDate) return false;
+    if(overviewPeriod === 'month') return item.dueDate.indexOf(curMonthPrefix) === 0;
+    if(overviewPeriod === 'year') return item.dueDate.indexOf(curYearPrefix) === 0;
+    return true;
+  };
+  var tasksArr = tasks.filter(inPeriod);
+  var todosArr = todos.filter(inPeriod);
+
+  var thaiMonth = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][nowOv.getMonth()];
+  var periodLabel = overviewPeriod === 'month' ? ('เดือน ' + thaiMonth + ' ' + (nowOv.getFullYear()+543))
+    : overviewPeriod === 'year' ? ('ปี พ.ศ. ' + (nowOv.getFullYear()+543))
+    : 'ทั้งหมด';
+  var periodBtns = '<div class="ov-period-bar">' +
+    '<span class="ov-period-caption">ช่วงเวลา (ตาม Due Date):</span>' +
+    '<button class="ov-period-btn' + (overviewPeriod==='month'?' active':'') + '" data-action="set-overview-period" data-key="month">เดือนนี้</button>' +
+    '<button class="ov-period-btn' + (overviewPeriod==='year'?' active':'') + '" data-action="set-overview-period" data-key="year">ปีนี้</button>' +
+    '<button class="ov-period-btn' + (overviewPeriod==='all'?' active':'') + '" data-action="set-overview-period" data-key="all">ทั้งหมด</button>' +
+    '<span class="ov-period-now">กำลังแสดง: <b>' + periodLabel + '</b></span>' +
+  '</div>';
+
   var totalProjects = projects.length;
 
   // --- Merged stats: project tasks ---
-  var tskDone = tasks.filter(function(t){ return Number(t.progress)===100; }).length;
-  var tskOverdue = tasks.filter(isOverdue).length;
-  var tskInProgress = tasks.filter(function(t){ var p=Number(t.progress); return p>0 && p<100 && !isOverdue(t); }).length;
-  var tskNotStarted = tasks.filter(function(t){ return Number(t.progress)===0 && !isOverdue(t); }).length;
+  var tskDone = tasksArr.filter(function(t){ return Number(t.progress)===100; }).length;
+  var tskOverdue = tasksArr.filter(isOverdue).length;
+  var tskInProgress = tasksArr.filter(function(t){ var p=Number(t.progress); return p>0 && p<100 && !isOverdue(t); }).length;
+  var tskNotStarted = tasksArr.filter(function(t){ return Number(t.progress)===0 && !isOverdue(t); }).length;
 
   // --- Merged stats: todos ---
-  var tdDone = todos.filter(function(t){ return t.status==='done'; }).length;
-  var tdOverdue = todos.filter(isTodoOverdue).length;
-  var tdInProgress = todos.filter(function(t){ return t.status==='in_progress' && !isTodoOverdue(t); }).length;
-  var tdNotStarted = todos.filter(function(t){ return t.status==='not_started' && !isTodoOverdue(t); }).length;
+  var tdDone = todosArr.filter(function(t){ return t.status==='done'; }).length;
+  var tdOverdue = todosArr.filter(isTodoOverdue).length;
+  var tdInProgress = todosArr.filter(function(t){ return t.status==='in_progress' && !isTodoOverdue(t); }).length;
+  var tdNotStarted = todosArr.filter(function(t){ return t.status==='not_started' && !isTodoOverdue(t); }).length;
 
   // --- Grand totals ---
-  var grandTotal = tasks.length + todos.length;
+  var grandTotal = tasksArr.length + todosArr.length;
   var grandDone = tskDone + tdDone;
   var grandOverdue = tskOverdue + tdOverdue;
   var grandInProgress = tskInProgress + tdInProgress;
@@ -1386,22 +1420,22 @@ function renderOverviewView(){
   var completionRate = grandTotal ? Math.round(grandDone/grandTotal*100) : 0;
 
   if(grandTotal === 0){
-    return head + '<div class="empty-state">' +
+    return head + periodBtns + '<div class="empty-state">' +
       '<div class="es-icon">&#128202;</div>' +
-      '<div class="es-title">ยังไม่มีข้อมูลงาน</div>' +
-      '<div class="es-sub">เริ่มสร้างโปรเจกต์ เพิ่มงาน หรือเพิ่มรายการ To-Do เพื่อดูสรุปภาพรวมและภาระงานของทีม</div>' +
+      '<div class="es-title">ยังไม่มีข้อมูลงานในช่วงเวลานี้</div>' +
+      '<div class="es-sub">ลองเปลี่ยนช่วงเวลาเป็น "ทั้งหมด" หรือเพิ่มงานที่มีวันกำหนดส่งในช่วงนี้</div>' +
     '</div>';
   }
 
   // KPIs
   var kpis = '<div class="kpi-grid">' +
-    '<div class="panel kpi-card" style="--accent:var(--navy)"><div class="kpi-label">โปรเจกต์ทั้งหมด</div><div class="kpi-value">' + totalProjects + '</div><div class="kpi-foot">To-Do ' + todos.length + ' &middot; งานโปรเจกต์ ' + tasks.length + '</div></div>' +
+    '<div class="panel kpi-card" style="--accent:var(--navy)"><div class="kpi-label">โปรเจกต์ทั้งหมด</div><div class="kpi-value">' + totalProjects + '</div><div class="kpi-foot">To-Do ' + todosArr.length + ' &middot; งานโปรเจกต์ ' + tasksArr.length + '</div></div>' +
     '<div class="panel kpi-card" style="--accent:var(--teal)"><div class="kpi-label">เสร็จสมบูรณ์</div><div class="kpi-value">' + completionRate + '%</div><div class="kpi-foot">' + grandDone + ' จาก ' + grandTotal + ' งานทั้งหมด</div></div>' +
     '<div class="panel kpi-card" style="--accent:var(--amber)"><div class="kpi-label">กำลังดำเนินการ</div><div class="kpi-value">' + grandInProgress + '</div><div class="kpi-foot">ยังไม่ได้เริ่ม ' + grandNotStarted + ' งาน</div></div>' +
     '<div class="panel kpi-card" style="--accent:var(--coral)"><div class="kpi-label">เลยกำหนด</div><div class="kpi-value">' + grandOverdue + '</div><div class="kpi-foot">ต้องติดตามเร่งด่วน</div></div>' +
   '</div>';
 
-  // Unified donut — split into 2 rings: inner = project tasks, outer area = todos shown via legend breakdown
+  // Unified donut
   var segs = [
     {key:'ns', n:grandNotStarted, c:'var(--slate)', label:'ยังไม่ได้เริ่ม'},
     {key:'ip', n:grandInProgress, c:'var(--amber)', label:'กำลังดำเนินการ'},
@@ -1411,7 +1445,7 @@ function renderOverviewView(){
   var donutSegs = segs.map(function(s){ return {value:s.n, color:s.c}; });
   var donutSvg = buildDonutSvg(donutSegs, {size:152, thickness:22, centerLabel:completionRate+'%', centerSub:'เสร็จสมบูรณ์'});
 
-  function makeSourceRow(label, ns, ip, dn, od, total, icon){
+  var makeSourceRow = function(label, ns, ip, dn, od, total, icon){
     return '<div style="margin-bottom:10px;">' +
       '<div style="font-size:11.5px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.05em; margin-bottom:4px;">' + icon + ' ' + label + ' <span class="mono" style="color:var(--ink);">' + total + '</span></div>' +
       '<div style="display:flex; gap:14px; flex-wrap:wrap;">' +
@@ -1421,7 +1455,7 @@ function renderOverviewView(){
         (od ? '<span style="font-size:12px; color:var(--coral); font-weight:700;">เลยกำหนด ' + od + '</span>' : '') +
       '</div>' +
     '</div>';
-  }
+  };
   var legendRows = segs.map(function(s){
     var pct = grandTotal ? Math.round(s.n/grandTotal*100) : 0;
     return '<div style="display:flex; align-items:center; gap:9px; padding:5px 0; border-bottom:1px solid var(--line-soft);">' +
@@ -1431,8 +1465,8 @@ function renderOverviewView(){
       '<span class="mono" style="font-size:11.5px; color:var(--ink-faint); min-width:36px; text-align:right;">' + pct + '%</span>' +
     '</div>';
   }).join('');
-  var sourceSummary = makeSourceRow('งานโปรเจกต์', tskNotStarted, tskInProgress, tskDone, tskOverdue, tasks.length, '&#128203;') +
-    (todos.length > 0 ? makeSourceRow('To-Do List', tdNotStarted, tdInProgress, tdDone, tdOverdue, todos.length, '&#128221;') : '');
+  var sourceSummary = makeSourceRow('งานโปรเจกต์', tskNotStarted, tskInProgress, tskDone, tskOverdue, tasksArr.length, '&#128203;') +
+    (todosArr.length > 0 ? makeSourceRow('To-Do List', tdNotStarted, tdInProgress, tdDone, tdOverdue, todosArr.length, '&#128221;') : '');
   var statusDonutPanel = '<div class="panel" style="padding:18px 20px; margin-bottom:20px; display:flex; gap:28px; align-items:flex-start; flex-wrap:wrap;">' +
     '<div style="display:flex; flex-direction:column; align-items:center; gap:6px;">' +
       donutSvg +
@@ -1448,15 +1482,15 @@ function renderOverviewView(){
   '</div>';
 
   // --- Unified workload by person (merge tasks + todos) ---
-  function segLabel(pctOfBar, text){ return pctOfBar >= 13 ? ('<span class="wl-seg-label">' + text + '</span>') : ''; }
+  var segLabel = function(pctOfBar, text){ return pctOfBar >= 13 ? ('<span class="wl-seg-label">' + text + '</span>') : ''; };
 
   var byPerson = {};
-  tasks.forEach(function(t){
+  tasksArr.forEach(function(t){
     var key = (t.assignee || 'ไม่ระบุ').trim() || 'ไม่ระบุ';
     if(!byPerson[key]) byPerson[key] = {taskItems:[], todoItems:[]};
     byPerson[key].taskItems.push(t);
   });
-  todos.forEach(function(td){
+  todosArr.forEach(function(td){
     var key = (td.assignee || 'ไม่ระบุ').trim() || 'ไม่ระบุ';
     if(!byPerson[key]) byPerson[key] = {taskItems:[], todoItems:[]};
     byPerson[key].todoItems.push(td);
@@ -1513,7 +1547,7 @@ function renderOverviewView(){
     '</div>'
   ) : '';
 
-  return head + kpis + statusDonutPanel + workloadPanel;
+  return head + periodBtns + kpis + statusDonutPanel + workloadPanel;
 }
 
 /* ===================== Modals ===================== */
@@ -2125,6 +2159,10 @@ document.addEventListener('click', function(e){
       break;
     case 'clear-todo-assignee':
       todoFilterAssignee = '';
+      render();
+      break;
+    case 'set-overview-period':
+      overviewPeriod = el.getAttribute('data-key');
       render();
       break;
     case 'toggle-todo-window':
