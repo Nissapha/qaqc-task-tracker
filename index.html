@@ -796,24 +796,24 @@ function renderProjectsList(){
   });
 
   // Helper: is project fully done (all tasks 100% or no tasks but createdAt exists)
-  function isProjectDone(p){
+  var isProjectDone = function(p){
     var pt = tasksOfProject(p.id);
     if(pt.length === 0) return false;
     return pt.every(function(t){ return Number(t.progress) === 100; });
-  }
+  };
   // Sort helper: by earliest task startDate, fallback createdAt
-  function projectStartDate(p){
+  var projectStartDate = function(p){
     var pt = tasksOfProject(p.id).filter(function(t){ return t.startDate; });
     if(!pt.length) return p.createdAt ? String(p.createdAt) : '9999';
     return pt.slice().sort(function(a,b){ return a.startDate.localeCompare(b.startDate); })[0].startDate;
-  }
+  };
 
   var activeProjects = filtered.filter(function(p){ return !isProjectDone(p); })
     .slice().sort(function(a,b){ return projectStartDate(a).localeCompare(projectStartDate(b)); });
   var doneProjects = filtered.filter(function(p){ return isProjectDone(p); })
     .slice().sort(function(a,b){ return projectStartDate(a).localeCompare(projectStartDate(b)); });
 
-  function buildProjectCard(p){
+  var buildProjectCard = function(p){
     var pt = tasksOfProject(p.id);
     var total = pt.length;
     var done = pt.filter(function(t){ return Number(t.progress) === 100; }).length;
