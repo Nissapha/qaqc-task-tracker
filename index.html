@@ -967,6 +967,7 @@ function renderProjectDetail(){
       '</div></div>' +
       '<div style="display:flex; gap:8px; flex-wrap:wrap;">' +
         '<button class="btn btn-ghost" data-action="export-project-excel" data-id="' + p.id + '">&#128190; Export Excel</button>' +
+        '<button class="btn btn-ghost" data-action="export-project-gantt" data-id="' + p.id + '">&#128202; Export Gantt (รูปภาพ)</button>' +
         '<button class="btn btn-primary" data-action="open-task-modal" data-id="' + p.id + '">+ เพิ่มงาน</button>' +
       '</div>' +
     '</div>';
@@ -1911,73 +1912,32 @@ function exportProjectToExcel(pid){
   var ws1 = XLSX.utils.aoa_to_sheet(dataRows);
   ws1['!cols'] = [{wch:5},{wch:34},{wch:16},{wch:12},{wch:12},{wch:11},{wch:12},{wch:15},{wch:11},{wch:42}];
 
-  /* ── Sheet 2: text Gantt grid ── */
-  var validTasks = pt.filter(function(t){ return t.startDate && t.dueDate; });
-  var ganttRows = [['โปรเจกต์: ' + p.name + '   (ส่งออกเมื่อ ' + fmtDateThai(todayStr()) + ')']];
-  if(validTasks.length){
-    var minS = null, maxE = null;
-    validTasks.forEach(function(t){
-      var s = parseDateStr(t.startDate), e = parseDateStr(t.dueDate);
-      if(!minS || s < minS) minS = s;
-      if(!maxE || e > maxE) maxE = e;
-    });
-    var todayD = parseDateStr(todayStr());
-    var rangeStartD = minS;
-    var rangeEndD = (maxE && maxE > todayD) ? maxE : todayD;
-    var totalDays = dayDiff(rangeStartD, rangeEndD) + 1;
-
-    var monthRow = ['', '', '', ''];
-    var dayRow = ['ชื่องาน', 'ผู้รับผิดชอบ', 'ความคืบหน้า', 'สถานะ'];
-    for(var i=0;i<totalDays;i++){
-      var d = addDays(rangeStartD, i);
-      monthRow.push((i===0 || d.getDate()===1) ? fmtMonthYearShort(d) : '');
-      var dayLabel = String(d.getDate());
-      if(toDateStr(d) === todayStr()) dayLabel = '[' + dayLabel + ']';
-      dayRow.push(dayLabel);
-    }
-    ganttRows.push(monthRow, dayRow);
-
-    validTasks.forEach(function(t){
-      var s = statusInfo(t);
-      var row = [t.title, t.assignee, t.progress + '%', s.label];
-      var ts = parseDateStr(t.startDate), te = parseDateStr(t.dueDate);
-      var totalTaskDays = dayDiff(ts, te) + 1;
-      var completedDays = Math.round(totalTaskDays * Number(t.progress) / 100);
-      for(var di=0; di<totalDays; di++){
-        var dd = addDays(rangeStartD, di);
-        var ds = toDateStr(dd);
-        var cell = '';
-        if(ds >= t.startDate && ds <= t.dueDate){
-          var dayIdxInTask = dayDiff(ts, dd);
-          cell = dayIdxInTask < completedDays ? '\u25A0' : '\u25A2';
-        } else if(isOverdue(t) && ds > t.dueDate && ds <= todayStr()){
-          cell = '\u2715';
-        }
-        row.push(cell);
-      }
-      ganttRows.push(row);
-    });
-    ganttRows.push([]);
-    ganttRows.push(['สัญลักษณ์:  \u25A0 = ดำเนินการแล้ว    \u25A2 = ตามแผน (ยังไม่ถึง)    \u2715 = เกินกำหนด    [ ] = วันนี้']);
-  } else {
-    ganttRows.push(['ไม่มีงานที่มีวันเริ่มต้นและวันกำหนดส่งครบถ้วนสำหรับสร้างแผนภูมิ']);
-  }
-  var ws2 = XLSX.utils.aoa_to_sheet(ganttRows);
-  var cols2 = [{wch:30},{wch:14},{wch:10},{wch:15}];
-  var dayColCount = Math.max(0, (ganttRows[1] ? ganttRows[1].length : 4) - 4);
-  for(var c=0;c<dayColCount;c++) cols2.push({wch:3});
-  ws2['!cols'] = cols2;
-
   var wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws1, 'ข้อมูลงาน');
-  XLSX.utils.book_append_sheet(wb, ws2, 'Gantt Chart (Text)');
 
   var safeName = p.name.replace(/[^a-zA-Z0-9ก-๙_\- ]+/g, '_').trim() || 'project';
   var fileBase = 'QAQC_' + safeName + '_' + todayStr();
   XLSX.writeFile(wb, fileBase + '.xlsx');
+}
 
-  /* ── Gantt PNG: render to hidden canvas then download ── */
-  if(!validTasks.length) return;
+/* ===================== Export Gantt chart as PNG image ===================== */
+function exportProjectGantt(pid){
+  var p = projectById(pid);
+  if(!p) return;
+  var pt = sortByStartDate(tasksOfProject(pid));
+  var validTasks = pt.filter(function(t){ return t.startDate && t.dueDate; });
+  if(!validTasks.length){ alert('โปรเจกต์นี้ยังไม่มีงานที่มีวันเริ่มต้นและวันกำหนดส่งครบถ้วนสำหรับสร้างแผนภูมิ'); return; }
+
+  var minS = null, maxE = null;
+  validTasks.forEach(function(t){
+    var s = parseDateStr(t.startDate), e = parseDateStr(t.dueDate);
+    if(!minS || s < minS) minS = s;
+    if(!maxE || e > maxE) maxE = e;
+  });
+  var todayD = parseDateStr(todayStr());
+  var safeName = p.name.replace(/[^a-zA-Z0-9ก-๙_\- ]+/g, '_').trim() || 'project';
+  var fileBase = 'QAQC_' + safeName + '_' + todayStr();
+
   try {
     var CELL_H = 28, LEFT_W = 260, ASSIGNEE_W = 110, PCT_W = 60, DAY_W = 22, HDR_H = 46, TITLE_H = 36, PAD = 16;
     var totalDays2 = dayDiff(minS, (maxE > todayD ? maxE : todayD)) + 1;
@@ -2099,6 +2059,7 @@ function exportProjectToExcel(pid){
     link.click();
   } catch(err){
     console.warn('Gantt PNG render failed:', err);
+    alert('เกิดข้อผิดพลาดในการสร้างรูปภาพ Gantt chart กรุณาลองใหม่อีกครั้ง');
   }
 }
 
@@ -2201,6 +2162,9 @@ document.addEventListener('click', function(e){
       break;
     case 'export-project-excel':
       exportProjectToExcel(id);
+      break;
+    case 'export-project-gantt':
+      exportProjectGantt(id);
       break;
     case 'open-todo-modal':
       openModal(todoModalHtml(id || null));
