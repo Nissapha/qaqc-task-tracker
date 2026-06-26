@@ -252,6 +252,27 @@ table.tk tr.todo-row-done td:first-child{border-left:4px solid var(--teal);}
 table.tk tr.todo-row-inprogress td:first-child{border-left:4px solid var(--amber);}
 table.tk tr.todo-row-overdue td:first-child{border-left:4px solid var(--coral);}
 .todo-search-bar{display:flex; align-items:center; gap:8px; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:8px 14px; margin-bottom:14px;}
+/* Due remaining badges */
+.due-pill{display:inline-flex; align-items:center; gap:3px; font-size:11px; font-weight:700; padding:2px 8px; border-radius:20px; white-space:nowrap;}
+.due-pill.due-over{background:var(--coral-soft); color:var(--coral);}
+.due-pill.due-today{background:#FCE9C8; color:#B26A00;}
+.due-pill.due-soon{background:#FDF0D8; color:#C8821A;}
+.due-pill.due-ok{background:var(--slate-soft); color:var(--ink-soft);}
+.due-pill.due-done{background:var(--teal-soft); color:var(--teal);}
+/* Last-activity indicator */
+.last-act{display:inline-flex; align-items:center; gap:4px; font-size:11px; color:var(--ink-faint);}
+.last-act.stale{color:var(--coral); font-weight:700;}
+.last-act .dot{width:6px; height:6px; border-radius:50%; background:var(--teal); flex-shrink:0;}
+.last-act.stale .dot{background:var(--coral);}
+/* Activity log list */
+.act-log{display:flex; flex-direction:column; gap:0; max-height:280px; overflow-y:auto;}
+.act-item{display:flex; gap:10px; padding:9px 2px; border-bottom:1px solid var(--line-soft);}
+.act-item:last-child{border-bottom:none;}
+.act-icon{font-size:13px; flex-shrink:0; width:20px; text-align:center;}
+.act-main{flex:1; min-width:0;}
+.act-text{font-size:13px; color:var(--ink); word-break:break-word;}
+.act-meta{font-size:10.5px; color:var(--ink-faint); margin-top:2px; display:flex; gap:8px; align-items:center;}
+.act-tag{font-size:9.5px; font-weight:700; padding:1px 6px; border-radius:4px; background:var(--slate-soft); color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em;}
 .ov-period-bar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:18px;}
 .ov-period-caption{font-size:12.5px; color:var(--ink-soft); font-weight:600;}
 .ov-period-btn{padding:7px 16px; border:1px solid var(--line); border-radius:8px; background:var(--panel); font-size:13px; font-weight:600; font-family:'IBM Plex Sans'; color:var(--ink-soft); cursor:pointer; transition:all .12s;}
@@ -784,6 +805,58 @@ function truncate(s, n){ s = String(s||''); return s.length > n ? s.slice(0, n-1
 function latestNote(t){
   if(!t.notes || !t.notes.length) return null;
   return t.notes.slice().sort(function(a,b){ return b.date - a.date; })[0];
+}
+
+/* ===================== Activity log helpers ===================== */
+// Push an activity entry into an item's notes array. type: 'comment' | 'progress' | 'status' | 'created'
+function addActivity(item, type, text){
+  if(!item.notes) item.notes = [];
+  item.notes.push({ id: uid('act'), date: Date.now(), text: text, type: type || 'comment' });
+}
+// Timestamp (ms) of the most recent activity of any kind; falls back to updatedAt/createdAt
+function lastActivityTime(item){
+  var newest = 0;
+  if(item.notes && item.notes.length){
+    item.notes.forEach(function(n){ if(n.date > newest) newest = n.date; });
+  }
+  if(item.updatedAt && item.updatedAt > newest) newest = item.updatedAt;
+  if(!newest && item.createdAt) newest = item.createdAt;
+  return newest || 0;
+}
+// Whole days since a timestamp (0 = today)
+function daysSince(ms){
+  if(!ms) return null;
+  var d0 = new Date(); d0.setHours(0,0,0,0);
+  var d1 = new Date(ms); d1.setHours(0,0,0,0);
+  return Math.round((d0 - d1) / 86400000);
+}
+// Human label for last activity, plus a flag if it's been "stale" too long
+function lastActivityInfo(item){
+  var ms = lastActivityTime(item);
+  if(!ms) return { label:'ยังไม่เคยอัปเดต', days:null, stale:true };
+  var d = daysSince(ms);
+  var label = d === 0 ? 'อัปเดตวันนี้' : (d === 1 ? 'อัปเดตเมื่อวาน' : 'อัปเดต ' + d + ' วันก่อน');
+  return { label:label, days:d, stale:(d !== null && d >= 7) };
+}
+// Days remaining / overdue for an item with a dueDate. Returns {label, cls, days}
+function dueRemainingInfo(t){
+  if(!t.dueDate) return null;
+  var d0 = new Date(); d0.setHours(0,0,0,0);
+  var dd = parseDateStr(t.dueDate); dd.setHours(0,0,0,0);
+  var diff = Math.round((dd - d0) / 86400000);
+  var isDone = (typeof t.progress !== 'undefined') ? (Number(t.progress) === 100) : (t.status === 'done');
+  if(isDone) return { label:'เสร็จแล้ว', cls:'due-done', days:diff };
+  if(diff < 0) return { label:'เกินกำหนด ' + Math.abs(diff) + ' วัน', cls:'due-over', days:diff };
+  if(diff === 0) return { label:'ครบกำหนดวันนี้', cls:'due-today', days:0 };
+  if(diff === 1) return { label:'เหลือ 1 วัน', cls:'due-soon', days:1 };
+  if(diff <= 3) return { label:'เหลือ ' + diff + ' วัน', cls:'due-soon', days:diff };
+  return { label:'เหลือ ' + diff + ' วัน', cls:'due-ok', days:diff };
+}
+function activityTypeMeta(type){
+  if(type === 'progress') return { icon:'&#128200;', color:'var(--amber)', tag:'ความคืบหน้า' };
+  if(type === 'status')   return { icon:'&#128260;', color:'var(--navy)', tag:'สถานะ' };
+  if(type === 'created')  return { icon:'&#10024;', color:'var(--teal)', tag:'สร้างงาน' };
+  return { icon:'&#128172;', color:'var(--slate)', tag:'บันทึก' };
 }
 function sortByStartDate(list){
   return list.slice().sort(function(a,b){ return (a.startDate||'9999').localeCompare(b.startDate||'9999'); });
@@ -1342,15 +1415,17 @@ function renderTodosView(){
 
     // Inline notes panel (hidden by default, toggled via JS class)
     var notesListHtml = noteCount > 0 ? notes.slice().sort(function(a,b){ return b.date - a.date; }).map(function(n){
-      return '<div class="todo-note-item">' +
-        '<div class="note-date">' + fmtTimestamp(n.date) + '</div>' +
-        '<div class="note-text">' + esc(n.text) + '</div>' +
-      '</div>';
+      var m = activityTypeMeta(n.type);
+      return '<div class="act-item">' +
+        '<div class="act-icon" style="color:' + m.color + ';">' + m.icon + '</div>' +
+        '<div class="act-main"><div class="act-text">' + esc(n.text) + '</div>' +
+        '<div class="act-meta"><span>' + fmtTimestamp(n.date) + '</span><span class="act-tag">' + m.tag + '</span></div>' +
+        '</div></div>';
     }).join('') : '';
     var notesPanelHtml = '<tr class="todo-notes-panel" id="tnp-' + t.id + '" style="display:none;">' +
       '<td colspan="8" style="padding:0; border-bottom:none;">' +
         '<div class="todo-notes-expand">' +
-          (noteCount > 0 ? '<div class="todo-notes-list">' + notesListHtml + '</div>' : '') +
+          (noteCount > 0 ? '<div class="act-log" style="margin-bottom:10px;">' + notesListHtml + '</div>' : '') +
           '<div class="todo-note-add-row">' +
             '<textarea class="todo-note-ta" id="ta-' + t.id + '" placeholder="พิมพ์บันทึก..." rows="2"></textarea>' +
             '<button class="btn btn-primary btn-sm" data-action="add-todo-note" data-id="' + t.id + '">เพิ่มบันทึก</button>' +
@@ -1359,13 +1434,16 @@ function renderTodosView(){
       '</td>' +
     '</tr>';
 
+    var actInfo = lastActivityInfo(t);
+    var dueInfo = dueRemainingInfo(t);
     var descCell = '<div class="task-title">' + esc(t.description) + '</div>' +
-      (latestN ? '<div class="task-meta" style="color:var(--ink-faint); margin-top:3px;">&#128172; ' + esc(truncate(latestN.text, 60)) + '</div>' : '');
+      (latestN ? '<div class="task-meta" style="color:var(--ink-faint); margin-top:3px;">&#128172; ' + esc(truncate(latestN.text, 60)) + '</div>' : '') +
+      '<div class="last-act' + (actInfo.stale ? ' stale' : '') + '" style="margin-top:4px;"><span class="dot"></span>' + actInfo.label + '</div>';
 
     var mainRow = '<tr class="task-row ' + rowCls + '" data-action="open-todo-modal" data-id="' + t.id + '">' +
       '<td class="col-desc-cell">' + descCell + '</td>' +
       '<td>' + esc(t.assignee) + '</td>' +
-      '<td class="mono">' + fmtDateThai(t.dueDate) + '</td>' +
+      '<td><div class="mono">' + fmtDateThai(t.dueDate) + '</div>' + (dueInfo ? '<div style="margin-top:3px;"><span class="due-pill ' + dueInfo.cls + '">' + dueInfo.label + '</span></div>' : '') + '</td>' +
       '<td><span class="badge ' + urg.cls + '">' + urg.label + '</span></td>' +
       '<td><span class="badge ' + imp.cls + '">' + imp.label + '</span></td>' +
       '<td>' + (isTodoOverdue(t) ? '<span class="badge badge-coral">เกินกำหนด</span>' : '<select class="todo-status-select" data-action="todo-status-select" data-id="' + t.id + '">' + statusOptions + '</select>') + '</td>' +
@@ -1694,14 +1772,23 @@ function taskDetailModalHtml(taskId){
   if(!t) return '';
   var p = projectById(t.projectId);
   var s = statusInfo(t);
-  var notesHtml = (t.notes && t.notes.length) ? t.notes.slice().reverse().map(function(n){
-    return '<div class="note-item"><div class="note-date">' + fmtTimestamp(n.date) + '</div><div class="note-text">' + esc(n.text) + '</div></div>';
-  }).join('') : '<div style="font-size:12.5px; color:var(--ink-faint); padding:8px 0;">ยังไม่มีบันทึกการติดตาม</div>';
+  var dueInfo = dueRemainingInfo(t);
+  var actInfo = lastActivityInfo(t);
+  var actLogHtml = (t.notes && t.notes.length) ? t.notes.slice().sort(function(a,b){ return b.date - a.date; }).map(function(n){
+    var m = activityTypeMeta(n.type);
+    return '<div class="act-item">' +
+      '<div class="act-icon" style="color:' + m.color + ';">' + m.icon + '</div>' +
+      '<div class="act-main"><div class="act-text">' + esc(n.text) + '</div>' +
+      '<div class="act-meta"><span>' + fmtTimestamp(n.date) + '</span><span class="act-tag">' + m.tag + '</span></div>' +
+      '</div></div>';
+  }).join('') : '<div style="font-size:12.5px; color:var(--ink-faint); padding:8px 0;">ยังไม่มีประวัติการติดตาม</div>';
 
   return '' +
   '<div class="modal-head"><h3>' + esc(t.title) + '</h3><button class="modal-close" data-action="close-modal">&times;</button></div>' +
   '<div class="modal-body">' +
-    '<div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;"><span class="badge ' + s.cls + '">' + s.label + '</span>' +
+    '<div style="display:flex; align-items:center; gap:8px; margin-bottom:14px; flex-wrap:wrap;"><span class="badge ' + s.cls + '">' + s.label + '</span>' +
+    (dueInfo ? '<span class="due-pill ' + dueInfo.cls + '">' + dueInfo.label + '</span>' : '') +
+    '<span class="last-act' + (actInfo.stale ? ' stale' : '') + '"><span class="dot"></span>' + actInfo.label + '</span>' +
     (p ? '<span style="font-size:12px; color:var(--ink-soft);">โปรเจกต์: ' + esc(p.name) + '</span>' : '') + '</div>' +
     '<div class="task-detail-meta">' +
       '<div class="tdm-item"><div class="tdm-label">ผู้รับผิดชอบ</div><div class="tdm-value">' + esc(t.assignee) + '</div></div>' +
@@ -1719,8 +1806,8 @@ function taskDetailModalHtml(taskId){
     '</select>' +
     '<div style="margin-top:8px; text-align:right;"><button class="btn btn-primary btn-sm" data-action="update-progress" data-id="' + t.id + '">บันทึกความคืบหน้า</button></div>' +
 
-    '<div class="section-label">บันทึกการติดตามงาน</div>' +
-    '<div class="notes-list">' + notesHtml + '</div>' +
+    '<div class="section-label">ประวัติการติดตาม (Activity Log)</div>' +
+    '<div class="act-log">' + actLogHtml + '</div>' +
     '<div class="add-note-row">' +
       '<textarea id="f-new-note" placeholder="พิมพ์บันทึกการติดตาม เช่น ผลการตรวจสอบ / ปัญหาที่พบ / แผนถัดไป"></textarea>' +
       '<button class="btn btn-primary btn-sm" data-action="add-note" data-id="' + t.id + '">เพิ่มบันทึก</button>' +
@@ -1786,9 +1873,16 @@ function handleSaveTask(projectId, editId){
   var task;
   if(editId){
     task = taskById(editId);
-    if(task){ task.title = title; task.assignee = assignee; task.startDate = start; task.dueDate = due; task.progress = Number(progress); task.updatedAt = Date.now(); }
+    if(task){
+      var oldProgress = Number(task.progress);
+      task.title = title; task.assignee = assignee; task.startDate = start; task.dueDate = due; task.progress = Number(progress); task.updatedAt = Date.now();
+      if(Number(progress) !== oldProgress){
+        addActivity(task, 'progress', 'ปรับความคืบหน้า ' + oldProgress + '% → ' + Number(progress) + '%');
+      }
+    }
   } else {
     task = { id: uid('task'), projectId: projectId, title: title, assignee: assignee, startDate: start, dueDate: due, progress: Number(progress), notes: [], createdAt: Date.now() };
+    addActivity(task, 'created', 'สร้างงาน (ความคืบหน้าเริ่มต้น ' + Number(progress) + '%)');
     tasks.push(task);
   }
   pushTask(task);
@@ -1799,7 +1893,14 @@ function handleSaveTask(projectId, editId){
 function handleUpdateProgress(taskId){
   var val = document.getElementById('f-detail-progress').value;
   var t = taskById(taskId);
-  if(t){ t.progress = Number(val); t.updatedAt = Date.now(); pushTask(t); }
+  if(t){
+    var oldP = Number(t.progress);
+    if(Number(val) !== oldP){
+      t.progress = Number(val); t.updatedAt = Date.now();
+      addActivity(t, 'progress', 'ปรับความคืบหน้า ' + oldP + '% → ' + Number(val) + '%');
+      pushTask(t);
+    }
+  }
   closeModal();
   render();
 }
@@ -1811,7 +1912,7 @@ function handleAddNote(taskId){
   var t = taskById(taskId);
   if(t){
     if(!t.notes) t.notes = [];
-    t.notes.push({ id: uid('note'), date: Date.now(), text: text });
+    addActivity(t, 'comment', text);
     pushTask(t);
   }
   openModal(taskDetailModalHtml(taskId));
@@ -1855,9 +1956,16 @@ function handleSaveTodo(editId){
   var todo;
   if(editId){
     todo = todoById(editId);
-    if(todo){ todo.description = description; todo.assignee = assignee; todo.dueDate = dueDate; todo.urgency = urgency; todo.importance = importance; todo.status = status; todo.updatedAt = Date.now(); }
+    if(todo){
+      var oldStatus = todo.status;
+      todo.description = description; todo.assignee = assignee; todo.dueDate = dueDate; todo.urgency = urgency; todo.importance = importance; todo.status = status; todo.updatedAt = Date.now();
+      if(status !== oldStatus){
+        addActivity(todo, 'status', 'เปลี่ยนสถานะเป็น "' + ((todoStatusById(status)||{}).label||status) + '"');
+      }
+    }
   } else {
     todo = { id: uid('todo'), description: description, assignee: assignee, dueDate: dueDate, urgency: urgency, importance: importance, status: status, notes: [], createdAt: Date.now() };
+    addActivity(todo, 'created', 'สร้างงาน');
     todos.push(todo);
   }
   pushTodo(todo);
@@ -1881,7 +1989,7 @@ function handleAddTodoNote(todoId){
   var td = todoById(todoId);
   if(td){
     if(!td.notes) td.notes = [];
-    td.notes.push({ id: uid('tnote'), date: Date.now(), text: text });
+    addActivity(td, 'comment', text);
     pushTodo(td);
   }
   render();
@@ -2308,7 +2416,14 @@ document.addEventListener('change', function(e){
   if(action === 'todo-status-select'){
     var todoId = e.target.getAttribute('data-id');
     var td = todoById(todoId);
-    if(td){ td.status = e.target.value; td.updatedAt = Date.now(); pushTodo(td); }
+    if(td){
+      var oldSt = td.status;
+      td.status = e.target.value; td.updatedAt = Date.now();
+      if(e.target.value !== oldSt){
+        addActivity(td, 'status', 'เปลี่ยนสถานะเป็น "' + ((todoStatusById(e.target.value)||{}).label||e.target.value) + '"');
+      }
+      pushTodo(td);
+    }
     render();
     return;
   }
