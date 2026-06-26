@@ -2007,12 +2007,12 @@ document.addEventListener('input', function(e){
   if(e.target && e.target.id === 'todo-assignee-search'){
     todoFilterAssignee = e.target.value;
     render();
-    // restore focus after render
     var el = document.getElementById('todo-assignee-search');
     if(el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
   }
 });
-  var overlay = e.target.classList && e.target.classList.contains('modal-overlay');
+
+document.addEventListener('click', function(e){
   if(overlay){ closeModal(); return; }
 
   var el = e.target.closest('[data-action]');
