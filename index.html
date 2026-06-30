@@ -344,7 +344,7 @@ table.tk tr.todo-notes-panel td{padding:0; background:transparent;}
   box-shadow:0 1px 2px rgba(0,0,0,0.15);
 }
 .gantt-today-line{position:absolute; top:0; bottom:0; width:2px; background:var(--coral); z-index:5;}
-.gantt-today-label{position:absolute; top:-1px; left:5px; font-size:10px; color:var(--coral); font-weight:700; background:var(--panel); padding:1px 4px; border-radius:4px; z-index:6; white-space:nowrap;}
+.gantt-today-label{position:absolute; top:18px; left:5px; font-size:10px; color:var(--coral); font-weight:700; background:var(--panel); padding:1px 4px; border-radius:4px; z-index:6; white-space:nowrap;}
 
 /* ---------- Gantt bar v2: progress fill + overrun + date flanks ---------- */
 .gantt-bar-outer{position:absolute; top:8px; height:18px; border-radius:5px; overflow:hidden; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.12); background:var(--slate-soft); z-index:2;}
@@ -355,7 +355,7 @@ table.tk tr.todo-notes-panel td{padding:0; background:transparent;}
 .gantt-overrun.is-group{top:4px; height:18px;}
 .gantt-date-flank{position:absolute; top:0; height:34px; display:flex; align-items:center; font-size:9.5px; color:var(--ink-faint); font-family:'IBM Plex Mono'; white-space:nowrap; pointer-events:none; z-index:1; overflow:hidden;}
 .gantt-date-flank.is-group{height:26px;}
-.gantt-date-flank.flank-start{left:0; justify-content:flex-end; padding-right:6px;}
+.gantt-date-flank.flank-start{left:0; justify-content:flex-end; padding-right:6px; overflow:visible;}
 .gantt-date-flank.flank-end{justify-content:flex-start; padding-left:6px; overflow:visible;}
 .gantt-date-flank.flank-overdue{color:var(--coral); font-weight:700;}
 .legend-dot.striped{background:repeating-linear-gradient(45deg, var(--coral) 0 4px, #B8412E 4px 8px);}
@@ -1140,9 +1140,10 @@ function renderGanttSection(mode){
     // include today in the visible span if it extends past the last due date (for overrun bars)
     if(todayD > maxD) maxD = todayD;
     var spanDays = dayDiff(minD, maxD) + 1;
-    // Right buffer must leave room for the after-bar "% · date" label. Scale with span (≈20%), min 6 days.
+    // Right buffer for after-bar "% · date" label; left buffer for the start-date label.
     var rightBuffer = Math.max(6, Math.ceil(spanDays * 0.20));
-    rangeStart = addDays(minD, -2);
+    var leftBuffer = Math.max(4, Math.ceil(spanDays * 0.08));
+    rangeStart = addDays(minD, -leftBuffer);
     rangeEnd = addDays(maxD, rightBuffer);
   } else {
     rangeStart = firstDayOfMonth(todayD);
@@ -1230,9 +1231,13 @@ function renderGanttSection(mode){
   }
   var todayIdx = dayDiff(rangeStart, todayD);
   var todayLineHtml = '';
+  var todayTickLabelHtml = '';
   if(todayIdx >= 0 && todayIdx < totalDays){
     var tx = pct(todayIdx);
-    todayLineHtml = '<div class="gantt-today-line" style="left:' + tx + '%;"></div><div class="gantt-today-label" style="left:calc(' + tx + '% + 4px);">วันนี้</div>';
+    // body area: vertical line only (no label, so it won't overlap row content)
+    todayLineHtml = '<div class="gantt-today-line" style="left:' + tx + '%;"></div>';
+    // header tick row: the "วันนี้" label lives here, above the bars
+    todayTickLabelHtml = '<div class="gantt-today-line" style="left:' + tx + '%;"></div><div class="gantt-today-label" style="left:calc(' + tx + '% + 4px);">วันนี้</div>';
   }
 
   var projectsWithTasks = relevantProjects.filter(function(p){
@@ -1305,7 +1310,7 @@ function renderGanttSection(mode){
   var gantt = '<div class="gantt-wrap">' +
     '<div class="gantt-labels">' + labelsHtml + '</div>' +
     '<div class="gantt-scroll"><div class="gantt-timeline">' +
-      '<div class="gantt-tick-row">' + ticksHtml + tickLabelsHtml + (todayIdx>=0 && todayIdx<totalDays ? '<div class="gantt-today-line" style="left:' + pct(todayIdx) + '%;"></div>' : '') + '</div>' +
+      '<div class="gantt-tick-row">' + ticksHtml + tickLabelsHtml + todayTickLabelHtml + '</div>' +
       rowsHtml +
     '</div></div>' +
   '</div>';
