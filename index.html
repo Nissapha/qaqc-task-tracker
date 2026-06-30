@@ -356,7 +356,7 @@ table.tk tr.todo-notes-panel td{padding:0; background:transparent;}
 .gantt-date-flank{position:absolute; top:0; height:34px; display:flex; align-items:center; font-size:9.5px; color:var(--ink-faint); font-family:'IBM Plex Mono'; white-space:nowrap; pointer-events:none; z-index:1; overflow:hidden;}
 .gantt-date-flank.is-group{height:26px;}
 .gantt-date-flank.flank-start{left:0; justify-content:flex-end; padding-right:6px;}
-.gantt-date-flank.flank-end{justify-content:flex-start; padding-left:6px;}
+.gantt-date-flank.flank-end{justify-content:flex-start; padding-left:6px; overflow:visible;}
 .gantt-date-flank.flank-overdue{color:var(--coral); font-weight:700;}
 .legend-dot.striped{background:repeating-linear-gradient(45deg, var(--coral) 0 4px, #B8412E 4px 8px);}
 
@@ -1137,8 +1137,13 @@ function renderGanttSection(mode){
       if(!minD || s < minD) minD = s;
       if(!maxD || e > maxD) maxD = e;
     });
+    // include today in the visible span if it extends past the last due date (for overrun bars)
+    if(todayD > maxD) maxD = todayD;
+    var spanDays = dayDiff(minD, maxD) + 1;
+    // Right buffer must leave room for the after-bar "% · date" label. Scale with span (≈20%), min 6 days.
+    var rightBuffer = Math.max(6, Math.ceil(spanDays * 0.20));
     rangeStart = addDays(minD, -2);
-    rangeEnd = addDays(maxD, 3);
+    rangeEnd = addDays(maxD, rightBuffer);
   } else {
     rangeStart = firstDayOfMonth(todayD);
     rangeEnd = lastDayOfMonth(todayD);
