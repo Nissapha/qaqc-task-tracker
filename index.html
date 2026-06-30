@@ -1661,16 +1661,37 @@ function renderOverviewView(){
   var segLabel = function(pctOfBar, text){ return pctOfBar >= 13 ? ('<span class="wl-seg-label">' + text + '</span>') : ''; };
 
   var byPerson = {};
+  // Group by PROJECT OWNER, not by each task's assignee — 1 project = 1 workload item.
+  // Status reflects the average progress across all tasks in that project (within the selected period).
+  var tasksByProject = {};
   tasksArr.forEach(function(t){
-    var key = (t.assignee || 'ไม่ระบุ').trim() || 'ไม่ระบุ';
-    if(!byPerson[key]) byPerson[key] = {taskItems:[], todoItems:[]};
-    byPerson[key].taskItems.push(t);
+    if(!tasksByProject[t.projectId]) tasksByProject[t.projectId] = [];
+    tasksByProject[t.projectId].push(t);
+  });
+  projects.forEach(function(proj){
+    var projTasks = tasksByProject[proj.id];
+    if(!projTasks || !projTasks.length) return; // no tasks in this period → project doesn't count
+    var ownerKey = (proj.owner || 'ไม่ระบุ').trim() || 'ไม่ระบุ';
+    if(!byPerson[ownerKey]) byPerson[ownerKey] = {taskItems:[], todoItems:[]};
+    var avgProgress = Math.round(projTasks.reduce(function(s,t){ return s + Number(t.progress); }, 0) / projTasks.length);
+    var anyOverdue = projTasks.some(isOverdue);
+    var latestDue = projTasks.reduce(function(d,t){ return (!d || (t.dueDate && t.dueDate > d)) ? t.dueDate : d; }, null);
+    // Synthetic "task" representing the whole project for this owner's workload tally
+    byPerson[ownerKey].taskItems.push({
+      id: 'proj-' + proj.id,
+      title: proj.name,
+      progress: avgProgress,
+      dueDate: latestDue,
+      __isProjectRollup: true,
+      __overdueOverride: anyOverdue && avgProgress < 100
+    });
   });
   todosArr.forEach(function(td){
     var key = (td.assignee || 'ไม่ระบุ').trim() || 'ไม่ระบุ';
     if(!byPerson[key]) byPerson[key] = {taskItems:[], todoItems:[]};
     byPerson[key].todoItems.push(td);
   });
+  var isTaskOverdue = function(t){ return t.__isProjectRollup ? t.__overdueOverride : isOverdue(t); };
   var persons = Object.keys(byPerson).sort(function(a,b){
     var ta = byPerson[a].taskItems.length + byPerson[a].todoItems.length;
     var tb = byPerson[b].taskItems.length + byPerson[b].todoItems.length;
@@ -1680,11 +1701,11 @@ function renderOverviewView(){
 
   var wlRows = persons.map(function(name){
     var pd = byPerson[name];
-    // task stats
-    var tns = pd.taskItems.filter(function(t){ return Number(t.progress)===0 && !isOverdue(t); }).length;
-    var tip = pd.taskItems.filter(function(t){ var p=Number(t.progress); return p>0 && p<100 && !isOverdue(t); }).length;
+    // task stats (now: 1 row per project owned)
+    var tns = pd.taskItems.filter(function(t){ return Number(t.progress)===0 && !isTaskOverdue(t); }).length;
+    var tip = pd.taskItems.filter(function(t){ var p=Number(t.progress); return p>0 && p<100 && !isTaskOverdue(t); }).length;
     var tdn = pd.taskItems.filter(function(t){ return Number(t.progress)===100; }).length;
-    var tod = pd.taskItems.filter(isOverdue).length;
+    var tod = pd.taskItems.filter(isTaskOverdue).length;
     // todo stats
     var dns = pd.todoItems.filter(function(t){ return t.status==='not_started' && !isTodoOverdue(t); }).length;
     var dip = pd.todoItems.filter(function(t){ return t.status==='in_progress' && !isTodoOverdue(t); }).length;
@@ -1696,7 +1717,7 @@ function renderOverviewView(){
     var widthPct = (total / maxPersonCount * 100);
     var donePct = total ? Math.round(dn/total*100) : 0;
     var ring = buildDonutSvg([{value:dn,color:'var(--teal)'},{value:total-dn,color:'var(--slate-soft)'}], {size:46, thickness:6, centerLabel:donePct+'%', labelSize:11});
-    var taskBadge = pd.taskItems.length ? ('<span style="font-size:10px; background:var(--navy-soft); color:var(--navy); border-radius:4px; padding:1px 5px; font-weight:700; margin-left:4px;">P:' + pd.taskItems.length + '</span>') : '';
+    var taskBadge = pd.taskItems.length ? ('<span style="font-size:10px; background:var(--navy-soft); color:var(--navy); border-radius:4px; padding:1px 5px; font-weight:700; margin-left:4px;">โปรเจกต์:' + pd.taskItems.length + '</span>') : '';
     var todoBadge = pd.todoItems.length ? ('<span style="font-size:10px; background:var(--teal-soft); color:#1D7468; border-radius:4px; padding:1px 5px; font-weight:700; margin-left:2px;">T:' + pd.todoItems.length + '</span>') : '';
     return '<div class="wl-row">' +
       '<div class="wl-ring">' + ring + '</div>' +
@@ -1714,11 +1735,11 @@ function renderOverviewView(){
   }).join('');
 
   var wlLegend = '<div style="display:flex; gap:14px; margin-bottom:10px; flex-wrap:wrap; font-size:11.5px; color:var(--ink-soft);">' +
-    '<span><b style="color:var(--navy);">P:n</b> = งานโปรเจกต์ &nbsp; <b style="color:#1D7468;">T:n</b> = To-Do List</span>' +
+    '<span><b style="color:var(--navy);">โปรเจกต์:n</b> = จำนวนโปรเจกต์ที่เป็นเจ้าของ (คิดความสำเร็จจากค่าเฉลี่ยของงานในโปรเจกต์) &nbsp; <b style="color:#1D7468;">T:n</b> = To-Do List</span>' +
   '</div>';
   var workloadPanel = persons.length > 0 ? (
     '<div class="panel" style="padding:18px 18px 6px 18px; margin-top:0;">' +
-      '<div class="section-label" style="margin-top:0;">ภาระงานของแต่ละคน (โปรเจกต์ + To-Do รวม)</div>' +
+      '<div class="section-label" style="margin-top:0;">ภาระงานของแต่ละคน (เจ้าของโปรเจกต์ + To-Do รวม)</div>' +
       wlLegend + wlRows +
     '</div>'
   ) : '';
