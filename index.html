@@ -252,6 +252,16 @@ table.tk tr.todo-row-done td:first-child{border-left:4px solid var(--teal);}
 table.tk tr.todo-row-inprogress td:first-child{border-left:4px solid var(--amber);}
 table.tk tr.todo-row-overdue td:first-child{border-left:4px solid var(--coral);}
 .todo-search-bar{display:flex; align-items:center; gap:8px; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:8px 14px; margin-bottom:14px;}
+/* Multi-assignee form rows */
+#f-task-assignee-rows{display:flex; flex-direction:column; gap:6px;}
+.assignee-row{display:flex; gap:6px; align-items:center;}
+.assignee-row .f-assignee-name{flex:1.2; padding:8px 10px; border:1px solid var(--line); border-radius:8px; font-size:13.5px; font-family:'IBM Plex Sans';}
+.assignee-row .f-assignee-dept{flex:1; padding:8px 10px; border:1px solid var(--line); border-radius:8px; font-size:13.5px; font-family:'IBM Plex Sans'; color:var(--ink-soft);}
+.assignee-remove-btn{flex-shrink:0; padding:6px 10px !important; font-size:16px !important; line-height:1; color:var(--coral) !important;}
+/* Assignee chips (table / detail display) */
+.assignee-chip-wrap{display:flex; flex-wrap:wrap; gap:4px;}
+.assignee-chip{display:inline-flex; align-items:center; gap:4px; background:var(--navy-soft); color:var(--navy); font-size:11.5px; font-weight:600; padding:2px 8px; border-radius:12px; white-space:nowrap;}
+.assignee-chip .ac-dept{background:rgba(255,255,255,0.6); color:var(--ink-soft); font-size:10px; font-weight:700; padding:0px 6px; border-radius:8px;}
 /* Due remaining badges */
 .due-pill{display:inline-flex; align-items:center; gap:3px; font-size:11px; font-weight:700; padding:2px 8px; border-radius:20px; white-space:nowrap;}
 .due-pill.due-over{background:var(--coral-soft); color:var(--coral);}
@@ -800,6 +810,34 @@ function statusInfo(t){
 }
 function projectById(id){ return projects.find(function(p){ return p.id === id; }); }
 function taskById(id){ return tasks.find(function(t){ return t.id === id; }); }
+
+/* ===================== Task assignees (name + department, supports multiple people) ===================== */
+// Returns a normalized array [{name, dept}], migrating legacy string `assignee` automatically.
+function taskAssigneesArr(t){
+  if(Array.isArray(t.assignees) && t.assignees.length){
+    return t.assignees.map(function(a){ return { name: a.name || '', dept: a.dept || '' }; });
+  }
+  if(t.assignee){
+    return [{ name: t.assignee, dept: '' }];
+  }
+  return [];
+}
+// Human-readable summary, e.g. "คนA (QA), คนB (Production)"
+function taskAssigneeDisplay(t){
+  var arr = taskAssigneesArr(t);
+  if(!arr.length) return '';
+  return arr.map(function(a){ return a.dept ? (a.name + ' (' + a.dept + ')') : a.name; }).join(', ');
+}
+// Short summary for tight spaces (Gantt label): names only, comma-separated
+function taskAssigneeNamesShort(t){
+  var arr = taskAssigneesArr(t);
+  return arr.map(function(a){ return a.name; }).join(', ');
+}
+// Searchable text blob (names + departments) used by filters/search
+function taskAssigneeSearchText(t){
+  var arr = taskAssigneesArr(t);
+  return arr.map(function(a){ return a.name + ' ' + a.dept; }).join(' ').toLowerCase();
+}
 function tasksOfProject(pid){ return tasks.filter(function(t){ return t.projectId === pid; }); }
 function nextColor(){ return PROJECT_COLORS[projects.length % PROJECT_COLORS.length]; }
 function truncate(s, n){ s = String(s||''); return s.length > n ? s.slice(0, n-1) + '…' : s; }
@@ -1062,12 +1100,15 @@ function renderProjectDetail(){
     var dueInfo = dueRemainingInfo(t);
     var lastN = latestNote(t);
     var rowCls = isOverdue(t) ? 'todo-row-overdue' : (Number(t.progress) === 100 ? 'todo-row-done' : (Number(t.progress) > 0 ? 'todo-row-inprogress' : ''));
+    var assigneeChips = taskAssigneesArr(t).map(function(a){
+      return '<span class="assignee-chip">' + esc(a.name) + (a.dept ? '<span class="ac-dept">' + esc(a.dept) + '</span>' : '') + '</span>';
+    }).join('');
     return '<tr class="task-row ' + rowCls + '" data-action="open-task-detail" data-id="' + t.id + '">' +
       '<td class="col-desc-cell"><div class="task-title">' + esc(t.title) + '</div>' +
         (lastN ? '<div class="task-meta">&#128172; ' + esc(truncate(lastN.text, 70)) + '</div>' : '') +
         '<div class="last-act' + (actInfo.stale ? ' stale' : '') + '" style="margin-top:4px;"><span class="dot"></span>' + actInfo.label + '</div>' +
       '</td>' +
-      '<td>' + esc(t.assignee) + '</td>' +
+      '<td><div class="assignee-chip-wrap">' + assigneeChips + '</div></td>' +
       '<td class="mono">' + fmtDateThai(t.startDate) + '</td>' +
       '<td><div class="mono">' + fmtDateThai(t.dueDate) + '</div>' + (dueInfo ? '<div style="margin-top:3px;"><span class="due-pill ' + dueInfo.cls + '">' + dueInfo.label + '</span></div>' : '') + '</td>' +
       '<td><div style="display:flex; align-items:center; gap:8px;"><div class="progress-track"><div class="progress-fill" style="width:' + t.progress + '%; background:' + s.color + '"></div></div><span class="mono" style="font-size:12px;">' + t.progress + '%</span></div></td>' +
@@ -1259,7 +1300,7 @@ function renderGanttSection(mode){
     var note = latestNote(t);
     var seg = buildBarSegments(t, rangeStart, rangeEnd, totalDays);
     var tooltip = t.title + ' (' + t.progress + '%)' + (note ? ' — ' + truncate(note.text, 60) : '');
-    labelsHtml += '<div class="gantt-label-row" title="' + esc(t.title) + ' — ' + esc(t.assignee) + '"><div><div class="glr-title">' + esc(t.title) + '</div><div class="glr-sub">' + esc(t.assignee) + '</div></div></div>';
+    labelsHtml += '<div class="gantt-label-row" title="' + esc(t.title) + ' — ' + esc(taskAssigneeDisplay(t)) + '"><div><div class="glr-title">' + esc(t.title) + '</div><div class="glr-sub">' + esc(taskAssigneeNamesShort(t)) + '</div></div></div>';
 
     var trackInner = renderBarHtml(t, seg, { dataAction:'open-task-detail', dataId:t.id, tooltip:tooltip });
     if(seg.hasPlan || seg.hasOverrun){
@@ -1797,11 +1838,23 @@ function projectModalHtml(editId){
 
 function taskModalHtml(projectId, editId){
   var t = editId ? taskById(editId) : null;
+  var assigneeList = t ? taskAssigneesArr(t) : [{name:'', dept:''}];
+  if(!assigneeList.length) assigneeList = [{name:'', dept:''}];
+  var assigneeRowsHtml = assigneeList.map(function(a, idx){
+    return '<div class="assignee-row" data-assignee-row>' +
+      '<input type="text" class="f-assignee-name" value="' + esc(a.name) + '" placeholder="ชื่อผู้รับผิดชอบ">' +
+      '<input type="text" class="f-assignee-dept" value="' + esc(a.dept) + '" placeholder="ฝ่าย (เช่น QA, Production)">' +
+      '<button type="button" class="btn btn-ghost btn-sm assignee-remove-btn" data-action="remove-assignee-row" title="ลบแถวนี้">&times;</button>' +
+    '</div>';
+  }).join('');
   return '' +
   '<div class="modal-head"><h3>' + (t ? 'แก้ไขงาน' : 'เพิ่มงานใหม่') + '</h3><button class="modal-close" data-action="close-modal">&times;</button></div>' +
   '<div class="modal-body">' +
     '<div class="field"><label>ชื่องาน *</label><input type="text" id="f-task-title" value="' + (t?esc(t.title):'') + '" placeholder="เช่น ตรวจสอบ Incoming Material รุ่น ON2-08VP"></div>' +
-    '<div class="field"><label>ผู้รับผิดชอบ *</label><input type="text" id="f-task-assignee" value="' + (t?esc(t.assignee):'') + '" placeholder="ชื่อผู้รับผิดชอบ"></div>' +
+    '<div class="field"><label>ผู้รับผิดชอบ * <span style="color:var(--ink-faint); font-weight:400;">(เพิ่มได้หลายคน แต่ละคนระบุฝ่ายแยกกันได้)</span></label>' +
+      '<div id="f-task-assignee-rows">' + assigneeRowsHtml + '</div>' +
+      '<button type="button" class="btn btn-ghost btn-sm" data-action="add-assignee-row" style="margin-top:6px;">+ เพิ่มผู้รับผิดชอบ</button>' +
+    '</div>' +
     '<div class="field-row">' +
       '<div class="field"><label>วันเริ่มต้น *</label><input type="date" id="f-task-start" value="' + (t?t.startDate:'') + '"></div>' +
       '<div class="field"><label>วันกำหนดส่ง *</label><input type="date" id="f-task-due" value="' + (t?t.dueDate:'') + '"></div>' +
@@ -1843,7 +1896,7 @@ function taskDetailModalHtml(taskId){
     '<span class="last-act' + (actInfo.stale ? ' stale' : '') + '"><span class="dot"></span>' + actInfo.label + '</span>' +
     (p ? '<span style="font-size:12px; color:var(--ink-soft);">โปรเจกต์: ' + esc(p.name) + '</span>' : '') + '</div>' +
     '<div class="task-detail-meta">' +
-      '<div class="tdm-item"><div class="tdm-label">ผู้รับผิดชอบ</div><div class="tdm-value">' + esc(t.assignee) + '</div></div>' +
+      '<div class="tdm-item"><div class="tdm-label">ผู้รับผิดชอบ</div><div class="tdm-value"><div class="assignee-chip-wrap">' + taskAssigneesArr(t).map(function(a){ return '<span class="assignee-chip">' + esc(a.name) + (a.dept ? '<span class="ac-dept">' + esc(a.dept) + '</span>' : '') + '</span>'; }).join('') + '</div></div></div>' +
       '<div class="tdm-item"><div class="tdm-label">ความคืบหน้า</div><div class="tdm-value">' + t.progress + '%</div></div>' +
       '<div class="tdm-item"><div class="tdm-label">วันเริ่มต้น</div><div class="tdm-value">' + fmtDateThai(t.startDate) + '</div></div>' +
       '<div class="tdm-item"><div class="tdm-label">วันกำหนดส่ง</div><div class="tdm-value">' + fmtDateThai(t.dueDate) + '</div></div>' +
@@ -1904,14 +1957,22 @@ function handleSaveProject(editId){
 
 function handleSaveTask(projectId, editId){
   var title = document.getElementById('f-task-title').value.trim();
-  var assignee = document.getElementById('f-task-assignee').value.trim();
+  var rowEls = document.querySelectorAll('#f-task-assignee-rows [data-assignee-row]');
+  var assignees = [];
+  for(var ri=0; ri<rowEls.length; ri++){
+    var nameEl = rowEls[ri].querySelector('.f-assignee-name');
+    var deptEl = rowEls[ri].querySelector('.f-assignee-dept');
+    var nm = nameEl ? nameEl.value.trim() : '';
+    var dp = deptEl ? deptEl.value.trim() : '';
+    if(nm) assignees.push({ name: nm, dept: dp });
+  }
   var start = document.getElementById('f-task-start').value;
   var due = document.getElementById('f-task-due').value;
   var progress = document.getElementById('f-task-progress').value;
   var errEl = document.getElementById('f-task-error');
 
-  if(!title || !assignee || !start || !due){
-    errEl.textContent = 'กรุณากรอกข้อมูลให้ครบ: ชื่องาน ผู้รับผิดชอบ วันเริ่มต้น และวันกำหนดส่ง';
+  if(!title || !assignees.length || !start || !due){
+    errEl.textContent = 'กรุณากรอกข้อมูลให้ครบ: ชื่องาน ผู้รับผิดชอบอย่างน้อย 1 คน วันเริ่มต้น และวันกำหนดส่ง';
     errEl.classList.add('show');
     return;
   }
@@ -1927,13 +1988,13 @@ function handleSaveTask(projectId, editId){
     task = taskById(editId);
     if(task){
       var oldProgress = Number(task.progress);
-      task.title = title; task.assignee = assignee; task.startDate = start; task.dueDate = due; task.progress = Number(progress); task.updatedAt = Date.now();
+      task.title = title; task.assignees = assignees; delete task.assignee; task.startDate = start; task.dueDate = due; task.progress = Number(progress); task.updatedAt = Date.now();
       if(Number(progress) !== oldProgress){
         addActivity(task, 'progress', 'ปรับความคืบหน้า ' + oldProgress + '% → ' + Number(progress) + '%');
       }
     }
   } else {
-    task = { id: uid('task'), projectId: projectId, title: title, assignee: assignee, startDate: start, dueDate: due, progress: Number(progress), notes: [], createdAt: Date.now() };
+    task = { id: uid('task'), projectId: projectId, title: title, assignees: assignees, startDate: start, dueDate: due, progress: Number(progress), notes: [], createdAt: Date.now() };
     addActivity(task, 'created', 'สร้างงาน (ความคืบหน้าเริ่มต้น ' + Number(progress) + '%)');
     tasks.push(task);
   }
@@ -2068,7 +2129,7 @@ function exportProjectToExcel(pid){
     var s = statusInfo(t);
     var note = latestNote(t);
     var dur = (t.startDate && t.dueDate) ? (dayDiff(parseDateStr(t.startDate), parseDateStr(t.dueDate)) + 1) : '';
-    dataRows.push([idx+1, t.title, t.assignee, t.startDate||'', t.dueDate||'', dur, Number(t.progress), s.label, overdueDaysOf(t)||'', note ? note.text : '']);
+    dataRows.push([idx+1, t.title, taskAssigneeDisplay(t), t.startDate||'', t.dueDate||'', dur, Number(t.progress), s.label, overdueDaysOf(t)||'', note ? note.text : '']);
   });
   var ws1 = XLSX.utils.aoa_to_sheet(dataRows);
   ws1['!cols'] = [{wch:5},{wch:34},{wch:16},{wch:12},{wch:12},{wch:11},{wch:12},{wch:15},{wch:11},{wch:42}];
@@ -2327,6 +2388,27 @@ document.addEventListener('click', function(e){
     case 'open-edit-task':
       var tk = taskById(id);
       if(tk) openModal(taskModalHtml(tk.projectId, id));
+      break;
+    case 'add-assignee-row':
+      e.stopPropagation();
+      var rowsContainer = document.getElementById('f-task-assignee-rows');
+      if(rowsContainer){
+        var newRow = document.createElement('div');
+        newRow.className = 'assignee-row';
+        newRow.setAttribute('data-assignee-row', '');
+        newRow.innerHTML = '<input type="text" class="f-assignee-name" placeholder="ชื่อผู้รับผิดชอบ">' +
+          '<input type="text" class="f-assignee-dept" placeholder="ฝ่าย (เช่น QA, Production)">' +
+          '<button type="button" class="btn btn-ghost btn-sm assignee-remove-btn" data-action="remove-assignee-row" title="ลบแถวนี้">&times;</button>';
+        rowsContainer.appendChild(newRow);
+        newRow.querySelector('.f-assignee-name').focus();
+      }
+      break;
+    case 'remove-assignee-row':
+      e.stopPropagation();
+      var rowsContainer2 = document.getElementById('f-task-assignee-rows');
+      if(rowsContainer2 && rowsContainer2.querySelectorAll('[data-assignee-row]').length > 1){
+        el.closest('[data-assignee-row]').remove();
+      }
       break;
     case 'save-task':
       handleSaveTask(el.getAttribute('data-pid'), id || null);
