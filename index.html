@@ -323,9 +323,10 @@ table.tk tr.todo-notes-panel td{padding:0; background:transparent;}
 .gantt-wrap{display:flex; border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; background:var(--panel);}
 .gantt-labels{width:230px; flex-shrink:0; border-right:1.5px solid var(--line); background:#FAFCFD;}
 .gantt-label-head{height:38px; border-bottom:1.5px solid var(--line); display:flex; align-items:center; padding:0 12px; font-size:11px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.05em;}
-.gantt-label-row{height:34px; display:flex; align-items:center; padding:0 12px; border-bottom:1px solid var(--line-soft); font-size:12.5px;}
-.gantt-label-row .glr-title{font-weight:600; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.gantt-label-row .glr-sub{font-size:10.5px; color:var(--ink-faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.gantt-label-row{height:34px; display:flex; align-items:center; padding:0 12px; border-bottom:1px solid var(--line-soft); font-size:12.5px; overflow:hidden;}
+.gantt-label-row > div{min-width:0; width:100%; overflow:hidden;}
+.gantt-label-row .glr-title{font-weight:600; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%;}
+.gantt-label-row .glr-sub{font-size:10.5px; color:var(--ink-faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;}
 .gantt-group-row{height:26px; background:var(--navy-soft); display:flex; align-items:center; padding:0 12px; font-size:11.5px; font-weight:700; color:var(--navy); border-bottom:1px solid var(--line-soft);}
 .gantt-scroll{flex:1; min-width:0;}
 .gantt-timeline{position:relative; width:100%;}
@@ -364,7 +365,7 @@ table.tk tr.todo-notes-panel td{padding:0; background:transparent;}
 .ggr-chevron{display:inline-block; width:12px; flex-shrink:0; transition:transform .15s ease; font-size:10px;}
 .ggr-chevron.collapsed{transform:rotate(-90deg);}
 .ggr-dot{width:8px; height:8px; border-radius:50%; flex-shrink:0;}
-.ggr-name{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.ggr-name{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .ggr-pct{font-family:'IBM Plex Mono'; font-size:11px; font-weight:700; flex-shrink:0;}
 
 /* ---------- Gantt toolbar ---------- */
@@ -1248,7 +1249,7 @@ function renderGanttSection(mode){
     var note = latestNote(t);
     var seg = buildBarSegments(t, rangeStart, rangeEnd, totalDays);
     var tooltip = t.title + ' (' + t.progress + '%)' + (note ? ' — ' + truncate(note.text, 60) : '');
-    labelsHtml += '<div class="gantt-label-row"><div><div class="glr-title">' + esc(t.title) + '</div><div class="glr-sub">' + esc(t.assignee) + '</div></div></div>';
+    labelsHtml += '<div class="gantt-label-row" title="' + esc(t.title) + ' — ' + esc(t.assignee) + '"><div><div class="glr-title">' + esc(t.title) + '</div><div class="glr-sub">' + esc(t.assignee) + '</div></div></div>';
 
     var trackInner = renderBarHtml(t, seg, { dataAction:'open-task-detail', dataId:t.id, tooltip:tooltip });
     if(seg.hasPlan || seg.hasOverrun){
