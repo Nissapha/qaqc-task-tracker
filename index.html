@@ -1140,14 +1140,28 @@ function renderProjectDetail(){
     var actInfo = lastActivityInfo(t);
     var dueInfo = dueRemainingInfo(t);
     var lastN = latestNote(t);
-    var rowCls = isOverdue(t) ? 'todo-row-overdue' : (Number(t.progress) === 100 ? 'todo-row-done' : (Number(t.progress) > 0 ? 'todo-row-inprogress' : ''));
+    var isDone = Number(t.progress) === 100;
+    var rowCls = isOverdue(t) ? 'todo-row-overdue' : (isDone ? 'todo-row-done' : (Number(t.progress) > 0 ? 'todo-row-inprogress' : ''));
     var assigneeChips = taskAssigneesArr(t).map(function(a){
       return '<span class="assignee-chip">' + esc(a.name) + (a.dept ? '<span class="ac-dept">' + esc(a.dept) + '</span>' : '') + '</span>';
     }).join('');
+    var actOrDoneHtml;
+    if(isDone){
+      var doneMs = completedDate(t);
+      if(doneMs){
+        var dd = new Date(doneMs); dd.setHours(0,0,0,0);
+        var thaiM=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+        actOrDoneHtml = '<div style="margin-top:4px; font-size:11px; color:var(--teal); font-weight:700;">&#10003; เสร็จ ' + dd.getDate() + ' ' + thaiM[dd.getMonth()] + ' ' + (dd.getFullYear()+543) + '</div>';
+      } else {
+        actOrDoneHtml = '<div style="margin-top:4px; font-size:11px; color:var(--teal); font-weight:700;">&#10003; เสร็จสมบูรณ์</div>';
+      }
+    } else {
+      actOrDoneHtml = '<div class="last-act' + (actInfo.stale ? ' stale' : '') + '" style="margin-top:4px;"><span class="dot"></span>' + actInfo.label + '</div>';
+    }
     return '<tr class="task-row ' + rowCls + '" data-action="open-task-detail" data-id="' + t.id + '">' +
       '<td class="col-desc-cell"><div class="task-title">' + esc(t.title) + '</div>' +
         (lastN ? '<div class="task-meta">&#128172; ' + esc(truncate(lastN.text, 70)) + '</div>' : '') +
-        '<div class="last-act' + (actInfo.stale ? ' stale' : '') + '" style="margin-top:4px;"><span class="dot"></span>' + actInfo.label + '</div>' +
+        actOrDoneHtml +
       '</td>' +
       '<td><div class="assignee-chip-wrap">' + assigneeChips + '</div></td>' +
       '<td class="mono">' + fmtDateThai(t.startDate) + '</td>' +
