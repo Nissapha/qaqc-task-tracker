@@ -387,9 +387,8 @@ table.tk tr.todo-notes-panel td{padding:0; background:transparent;}
 .gantt-date-flank.is-group{height:26px;}
 .gantt-date-flank.flank-start{left:0; justify-content:flex-end; padding-right:6px; overflow:visible;}
 .gantt-date-flank.flank-end{justify-content:flex-start; padding-left:6px; overflow:visible;}
-/* Gantt actual completion marker */
-.gantt-actual-marker{position:absolute; top:4px; bottom:4px; width:3px; border-radius:2px; z-index:8; pointer-events:none; opacity:0.9;}
-.gantt-actual-label{position:absolute; top:50%; transform:translateY(-50%); font-size:9px; font-weight:700; white-space:nowrap; z-index:9; pointer-events:none; padding-left:5px; line-height:1.2;}
+/* Gantt actual completion marker — vertical line only, label shown in flank-end */
+.gantt-actual-marker{position:absolute; top:3px; bottom:3px; width:3px; border-radius:2px; z-index:8; pointer-events:none; opacity:0.95;}
 .gantt-date-flank.flank-overdue{color:var(--coral); font-weight:700;}
 .legend-dot.striped{background:repeating-linear-gradient(45deg, var(--coral) 0 4px, #B8412E 4px 8px);}
 
@@ -1379,15 +1378,32 @@ function renderGanttSection(mode){
       if(doneMs){
         var doneD = parseDateStr(toDateStr(new Date(doneMs)));
         var doneInRange = doneD >= rangeStart && doneD <= rangeEnd;
+        var plannedDue = parseDateStr(t.dueDate);
+        var diffDays = dayDiff(plannedDue, doneD); // negative=early, positive=late, 0=on-time
+        var markerColor = diffDays < 0 ? 'var(--teal)' : (diffDays > 0 ? 'var(--coral)' : 'var(--slate)');
+        var diffLabel = diffDays < 0 ? ('ก่อนแผน ' + Math.abs(diffDays) + ' วัน') : (diffDays > 0 ? ('ล่าช้า ' + diffDays + ' วัน') : 'ตรงแผน');
+
+        // Replace the flank-end label for done tasks with richer completion info
+        // Remove last flank-end added and replace with actual-aware version
+        var flankEndTag = '<div class="gantt-date-flank flank-end';
+        var lastIdx = trackInner.lastIndexOf(flankEndTag);
+        if(lastIdx !== -1){
+          // Find end of this div
+          var closeIdx = trackInner.indexOf('</div>', lastIdx);
+          if(closeIdx !== -1){
+            var doneDateStr = fmtDateShort(doneD);
+            var newFlank = '<div class="gantt-date-flank flank-end' + (diffDays > 0 ? ' flank-overdue' : '') + '" style="left:' + seg.endOfBarPx + '%; width:' + (100-seg.endOfBarPx) + '%;">' +
+              '<span style="color:' + markerColor + '; font-weight:700;">&#10003; ' + doneDateStr + '</span>' +
+              '<span style="color:var(--ink-faint); margin-left:4px;">· ' + diffLabel + '</span>' +
+              '</div>';
+            trackInner = trackInner.slice(0, lastIdx) + newFlank;
+          }
+        }
+
+        // Draw the actual completion vertical line marker
         if(doneInRange){
           var actualPct = pct(dayDiff(rangeStart, doneD));
-          var plannedDue = parseDateStr(t.dueDate);
-          var diffDays = dayDiff(plannedDue, doneD); // negative = early, positive = late
-          var markerColor = diffDays < 0 ? 'var(--teal)' : (diffDays > 0 ? 'var(--coral)' : 'var(--slate)');
-          var markerLabel = diffDays < 0 ? ('เสร็จก่อน ' + Math.abs(diffDays) + ' วัน') : (diffDays > 0 ? ('ล่าช้า ' + diffDays + ' วัน') : 'ตรงแผน');
-          trackInner +=
-            '<div class="gantt-actual-marker" style="left:' + actualPct + '%; background:' + markerColor + ';" title="เสร็จจริง: ' + fmtDateShort(doneD) + ' — ' + markerLabel + '"></div>' +
-            '<div class="gantt-actual-label" style="left:' + actualPct + '%; color:' + markerColor + ';">' + markerLabel + '</div>';
+          trackInner += '<div class="gantt-actual-marker" style="left:' + actualPct + '%; background:' + markerColor + ';" title="เสร็จจริง: ' + fmtDateShort(doneD) + ' — ' + diffLabel + '"></div>';
         }
       }
     }
