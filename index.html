@@ -849,8 +849,12 @@ function todoAssigneeDisplay(t){
 // Find the timestamp when a todo/task was marked done (from activity log)
 function completedDate(t){
   if(!t.notes || !t.notes.length) return null;
+  // Search for any status-change activity that indicates completion
+  // Covers: 'เสร็จ', 'เสร็จสมบูรณ์', 'done', '100%' from progress logs
   var doneActs = t.notes.filter(function(n){
-    return n.type === 'status' && n.text && n.text.indexOf('เสร็จสมบูรณ์') !== -1;
+    if(n.type === 'status' && n.text && (n.text.indexOf('เสร็จ') !== -1 || n.text.indexOf('done') !== -1)) return true;
+    if(n.type === 'progress' && n.text && n.text.indexOf('100%') !== -1) return true;
+    return false;
   }).sort(function(a,b){ return b.date - a.date; });
   return doneActs.length ? doneActs[0].date : null;
 }
@@ -2529,6 +2533,9 @@ document.addEventListener('click', function(e){
       break;
     case 'open-project':
       currentProjectId = id;
+      ganttRangeStart = null;
+      ganttRangeEnd = null;
+      ganttZoomMode = 'custom';
       render();
       break;
     case 'open-project-modal':
