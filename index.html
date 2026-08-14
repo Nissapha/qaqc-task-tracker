@@ -389,8 +389,8 @@ table.tk tr.todo-notes-panel td{padding:0; background:transparent;}
 .gantt-date-flank.flank-end{justify-content:flex-start; padding-left:6px; overflow:visible;}
 /* Gantt actual completion marker — vertical line only, label shown in flank-end */
 .gantt-actual-marker{position:absolute; top:3px; bottom:3px; width:3px; border-radius:2px; z-index:8; pointer-events:none; opacity:0.95;}
-/* Actual overrun bar: shown when done task completed AFTER due date */
-.gantt-actual-overrun{background:repeating-linear-gradient(45deg,#B85045 0 4px,#8B3530 4px 8px) !important; opacity:0.7;}
+/* Actual overrun bar: shown when done task completed AFTER due date — solid coral, sits same height as planned bar */
+.gantt-actual-overrun{position:absolute; top:6px; height:22px; border-radius:0 5px 5px 0; background:#C0392B; opacity:0.75; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; color:#fff; z-index:3; pointer-events:auto; cursor:pointer;}
 .gantt-date-flank.flank-overdue{color:var(--coral); font-weight:700;}
 .legend-dot.striped{background:repeating-linear-gradient(45deg, var(--coral) 0 4px, #B8412E 4px 8px);}
 
@@ -1385,15 +1385,15 @@ function renderGanttSection(mode){
 
         if(diffDays > 0){
           // Late: draw actual overrun bar from dueDate+1 to doneD
-          var ovStart = parseDateStr(t.dueDate);
-          var ovVisStart = ovStart < rangeStart ? rangeStart : ovStart;
+          var ovStartD = addDays(parseDateStr(t.dueDate), 1);
+          var ovVisStart = ovStartD < rangeStart ? rangeStart : ovStartD;
           var ovVisEnd = doneD > rangeEnd ? rangeEnd : doneD;
           if(ovVisEnd >= ovVisStart){
             var ovLeft = pct(dayDiff(rangeStart, ovVisStart));
-            var ovWidth = Math.max(0.5, pct(dayDiff(ovVisStart, ovVisEnd) + 1));
+            var ovWidth = Math.max(0.8, pct(dayDiff(ovVisStart, ovVisEnd) + 1));
             var doneDateStr = fmtDateShort(doneD);
-            var ovLabel = diffDays >= 2 ? ('+' + diffDays) : '';
-            trackInner += '<div class="gantt-overrun gantt-actual-overrun" style="left:' + ovLeft + '%; width:' + ovWidth + '%;" title="เสร็จจริง: ' + doneDateStr + ' (ล่าช้า ' + diffDays + ' วัน)">' + ovLabel + '</div>';
+            var ovLabel = diffDays >= 3 ? ('+' + diffDays + 'วัน') : '';
+            trackInner += '<div class="gantt-actual-overrun" style="left:' + ovLeft + '%; width:' + ovWidth + '%;" title="เสร็จจริง: ' + doneDateStr + ' (ล่าช้า ' + diffDays + ' วัน)">' + ovLabel + '</div>';
           }
         }
 
