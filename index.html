@@ -387,6 +387,9 @@ table.tk tr.todo-notes-panel td{padding:0; background:transparent;}
 .gantt-date-flank.is-group{height:26px;}
 .gantt-date-flank.flank-start{left:0; justify-content:flex-end; padding-right:6px; overflow:visible;}
 .gantt-date-flank.flank-end{justify-content:flex-start; padding-left:6px; overflow:visible;}
+/* Gantt actual completion marker */
+.gantt-actual-marker{position:absolute; top:4px; bottom:4px; width:3px; border-radius:2px; z-index:8; pointer-events:none; opacity:0.9;}
+.gantt-actual-label{position:absolute; top:50%; transform:translateY(-50%); font-size:9px; font-weight:700; white-space:nowrap; z-index:9; pointer-events:none; padding-left:5px; line-height:1.2;}
 .gantt-date-flank.flank-overdue{color:var(--coral); font-weight:700;}
 .legend-dot.striped{background:repeating-linear-gradient(45deg, var(--coral) 0 4px, #B8412E 4px 8px);}
 
@@ -1365,6 +1368,26 @@ function renderGanttSection(mode){
       trackInner += '<div class="gantt-date-flank flank-end' + (seg.overdue?' flank-overdue':'') + '" style="left:' + endLeft + '%; width:' + (100-endLeft) + '%;">' +
         t.progress + '% &middot; ' + fmtDateShort(parseDateStr(t.dueDate)) + (seg.overdue ? ' (เกิน ' + seg.overdueDays + ' วัน)' : '') + '</div>';
     }
+
+    // Actual completion marker — only for done tasks with a recorded completion date
+    if(Number(t.progress) === 100){
+      var doneMs = completedDate(t);
+      if(doneMs){
+        var doneD = parseDateStr(toDateStr(new Date(doneMs)));
+        var doneInRange = doneD >= rangeStart && doneD <= rangeEnd;
+        if(doneInRange){
+          var actualPct = pct(dayDiff(rangeStart, doneD));
+          var plannedDue = parseDateStr(t.dueDate);
+          var diffDays = dayDiff(plannedDue, doneD); // negative = early, positive = late
+          var markerColor = diffDays < 0 ? 'var(--teal)' : (diffDays > 0 ? 'var(--coral)' : 'var(--slate)');
+          var markerLabel = diffDays < 0 ? ('เสร็จก่อน ' + Math.abs(diffDays) + ' วัน') : (diffDays > 0 ? ('ล่าช้า ' + diffDays + ' วัน') : 'ตรงแผน');
+          trackInner +=
+            '<div class="gantt-actual-marker" style="left:' + actualPct + '%; background:' + markerColor + ';" title="เสร็จจริง: ' + fmtDateShort(doneD) + ' — ' + markerLabel + '"></div>' +
+            '<div class="gantt-actual-label" style="left:' + actualPct + '%; color:' + markerColor + ';">' + markerLabel + '</div>';
+        }
+      }
+    }
+
     rowsHtml += '<div class="gantt-row-track">' + trackInner + '</div>';
   }
 
