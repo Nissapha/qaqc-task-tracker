@@ -1383,34 +1383,31 @@ function renderGanttSection(mode){
         var plannedDue = parseDateStr(t.dueDate);
         var diffDays = dayDiff(plannedDue, doneD); // positive = late, negative = early
 
+        // STEP 1: Update flank-end label FIRST (before appending overrun bar)
+        var flankEndTag = '<div class="gantt-date-flank flank-end';
+        var lastIdx = trackInner.lastIndexOf(flankEndTag);
+        if(lastIdx !== -1){
+          var doneDateStr2 = fmtDateShort(doneD);
+          var markerColor = diffDays < 0 ? 'var(--teal)' : (diffDays > 0 ? 'var(--coral)' : 'var(--slate)');
+          var diffLabel = diffDays < 0 ? ('ก่อนแผน ' + Math.abs(diffDays) + ' วัน') : (diffDays > 0 ? ('ล่าช้า ' + diffDays + ' วัน') : 'ตรงแผน');
+          var newFlank = '<div class="gantt-date-flank flank-end' + (diffDays > 0 ? ' flank-overdue' : '') + '" style="left:' + seg.endOfBarPx + '%; width:' + (100-seg.endOfBarPx) + '%;">' +
+            '<span style="color:' + markerColor + '; font-weight:700;">&#10003; ' + doneDateStr2 + '</span>' +
+            '<span style="color:var(--ink-faint); margin-left:4px;">· ' + diffLabel + '</span>' +
+            '</div>';
+          trackInner = trackInner.slice(0, lastIdx) + newFlank;
+        }
+
+        // STEP 2: Append actual overrun bar AFTER flank update so it is not sliced away
         if(diffDays > 0){
-          // Late: draw actual overrun bar from dueDate+1 to doneD
           var ovStartD = addDays(parseDateStr(t.dueDate), 1);
           var ovVisStart = ovStartD < rangeStart ? rangeStart : ovStartD;
           var ovVisEnd = doneD > rangeEnd ? rangeEnd : doneD;
           if(ovVisEnd >= ovVisStart){
             var ovLeft = pct(dayDiff(rangeStart, ovVisStart));
             var ovWidth = Math.max(0.8, pct(dayDiff(ovVisStart, ovVisEnd) + 1));
-            var doneDateStr = fmtDateShort(doneD);
+            var ovDoneStr = fmtDateShort(doneD);
             var ovLabel = diffDays >= 3 ? ('+' + diffDays + 'วัน') : '';
-            trackInner += '<div class="gantt-actual-overrun" style="left:' + ovLeft + '%; width:' + ovWidth + '%;" title="เสร็จจริง: ' + doneDateStr + ' (ล่าช้า ' + diffDays + ' วัน)">' + ovLabel + '</div>';
-          }
-        }
-
-        // Update flank-end label to show actual completion info
-        var flankEndTag = '<div class="gantt-date-flank flank-end';
-        var lastIdx = trackInner.lastIndexOf(flankEndTag);
-        if(lastIdx !== -1){
-          var closeIdx = trackInner.indexOf('</div>', lastIdx);
-          if(closeIdx !== -1){
-            var doneDateStr2 = fmtDateShort(doneD);
-            var markerColor = diffDays < 0 ? 'var(--teal)' : (diffDays > 0 ? 'var(--coral)' : 'var(--slate)');
-            var diffLabel = diffDays < 0 ? ('ก่อนแผน ' + Math.abs(diffDays) + ' วัน') : (diffDays > 0 ? ('ล่าช้า ' + diffDays + ' วัน') : 'ตรงแผน');
-            var newFlank = '<div class="gantt-date-flank flank-end' + (diffDays > 0 ? ' flank-overdue' : '') + '" style="left:' + seg.endOfBarPx + '%; width:' + (100-seg.endOfBarPx) + '%;">' +
-              '<span style="color:' + markerColor + '; font-weight:700;">&#10003; ' + doneDateStr2 + '</span>' +
-              '<span style="color:var(--ink-faint); margin-left:4px;">· ' + diffLabel + '</span>' +
-              '</div>';
-            trackInner = trackInner.slice(0, lastIdx) + newFlank;
+            trackInner += '<div class="gantt-actual-overrun" style="left:' + ovLeft + '%; width:' + ovWidth + '%;" title="เสร็จจริง: ' + ovDoneStr + ' (ล่าช้า ' + diffDays + ' วัน)">' + ovLabel + '</div>';
           }
         }
       }
