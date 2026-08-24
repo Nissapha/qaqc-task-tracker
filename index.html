@@ -1090,24 +1090,24 @@ function renderProjectsList(){
       '<div class="es-sub">ลองเปลี่ยนหรือล้างตัวกรองดู</div>' +
     '</div>';
   } else {
-    var activeGrid = activeProjects.length > 0
+    gridHtml = activeProjects.length > 0
       ? '<div class="project-grid">' + activeProjects.map(buildProjectCard).join('') + '</div>'
       : '';
-    var doneGrid = doneProjects.length > 0
-      ? '<div style="margin-top:24px;">' +
-          '<div class="section-label" style="color:var(--teal); margin-bottom:12px;">&#10003; โปรเจกต์ที่เสร็จสมบูรณ์แล้ว &middot; ' + doneProjects.length + ' โปรเจกต์</div>' +
-          '<div class="project-grid" style="opacity:0.82;">' + doneProjects.map(buildProjectCard).join('') + '</div>' +
-        '</div>'
-      : '';
-    gridHtml = activeGrid + doneGrid;
   }
+
+  var doneGrid = doneProjects.length > 0
+    ? '<div style="margin-top:24px;">' +
+        '<div class="section-label" style="color:var(--teal); margin-bottom:12px;">&#10003; โปรเจกต์ที่เสร็จสมบูรณ์แล้ว &middot; ' + doneProjects.length + ' โปรเจกต์</div>' +
+        '<div class="project-grid" style="opacity:0.82;">' + doneProjects.map(buildProjectCard).join('') + '</div>' +
+      '</div>'
+    : '';
 
   var ganttPanel = '<div class="panel" style="padding:16px 18px; margin-top:24px;">' +
     '<div class="section-label" style="margin-top:0; font-size:14px;">แผนภูมิแกนต์ — ภาพรวมระยะเวลาโครงการ</div>' +
     renderGanttSection('all') +
   '</div>';
 
-  return head + filterBar + gridHtml + ganttPanel;
+  return head + filterBar + gridHtml + ganttPanel + doneGrid;
 }
 
 /* ===================== Project detail ===================== */
