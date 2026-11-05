@@ -303,6 +303,18 @@ table.tk tr.todo-row-overdue td:first-child{border-left:4px solid var(--coral);}
 .act-text{font-size:13px; color:var(--ink); word-break:break-word;}
 .act-meta{font-size:10.5px; color:var(--ink-faint); margin-top:2px; display:flex; gap:8px; align-items:center;}
 .act-tag{font-size:9.5px; font-weight:700; padding:1px 6px; border-radius:4px; background:var(--slate-soft); color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em;}
+.act-edited-tag{font-size:10px; color:var(--ink-faint); font-style:italic;}
+.act-edit-btn{background:none; border:none; cursor:pointer; color:var(--ink-faint); font-size:15px; line-height:1; padding:4px 7px; border-radius:6px; flex-shrink:0; align-self:flex-start; opacity:.75;}
+.act-edit-btn:hover{background:var(--slate-soft); color:var(--navy); opacity:1;}
+.act-btns{display:flex; gap:0; flex-shrink:0; align-self:flex-start;}
+.act-edit-btn.act-del-btn{font-size:13px;}
+.act-edit-btn.act-del-btn:hover{background:var(--coral-soft); color:var(--coral);}
+.act-item.act-editing{background:#FAFCFD; border-radius:8px; padding:10px 8px;}
+.act-edit-form{display:flex; flex-direction:column; gap:6px; width:100%;}
+.act-edit-label{font-size:10.5px; font-weight:700; color:var(--ink-soft);}
+.act-edit-date{padding:7px 9px; border:1px solid var(--line); border-radius:8px; font-size:13px; font-family:'IBM Plex Sans'; max-width:250px;}
+.act-edit-text{padding:7px 9px; border:1px solid var(--line); border-radius:8px; font-size:13px; font-family:'IBM Plex Sans'; resize:vertical; min-height:46px; width:100%; box-sizing:border-box;}
+.act-edit-actions{display:flex; gap:6px; justify-content:flex-end; margin-top:2px;}
 .ov-period-bar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:18px;}
 .ov-period-caption{font-size:12.5px; color:var(--ink-soft); font-weight:600;}
 .ov-period-btn{padding:7px 16px; border:1px solid var(--line); border-radius:8px; background:var(--panel); font-size:13px; font-weight:600; font-family:'IBM Plex Sans'; color:var(--ink-soft); cursor:pointer; transition:all .12s;}
@@ -534,6 +546,7 @@ var todos = [];
 var currentView = 'projects';
 var currentProjectId = null;
 var currentTaskId = null;
+var editingActId = null; // id of the activity-log entry currently being edited (null = none)
 var wlUnfinishedByPerson = {}; // populated each render: { personName: [{kind:'project'|'todo', id, title, ...}] }
 var todoFilterWindow = 'all'; // 'all' | 'today' | 'week' | 'month' | 'overdue'
 var todoFilterStatus = 'all';
@@ -848,16 +861,99 @@ function todoAssigneeDisplay(t){
   return todoAssigneesArr(t).join(', ');
 }
 // Find the timestamp when a todo/task was marked done (from activity log)
+// Does this log entry represent "the item became 100% / done"?
+// n.done is a sticky flag set when such an entry is edited, so rewording the text can't break completion detection.
+function isDoneActivity(n){
+  if(n.done) return true;
+  var tx = n.text || '';
+  if(n.type === 'status')   return tx.indexOf('เสร็จ') !== -1 || tx.indexOf('done') !== -1;
+  if(n.type === 'progress') return /→\s*100%/.test(tx);          // "75% → 100%" (but not "100% → 75%")
+  if(n.type === 'created')  return /เริ่มต้น\s*100%/.test(tx);     // created already at 100%
+  return false;
+}
 function completedDate(t){
   if(!t.notes || !t.notes.length) return null;
-  // Search for any status-change activity that indicates completion
-  // Covers: 'เสร็จ', 'เสร็จสมบูรณ์', 'done', '100%' from progress logs
-  var doneActs = t.notes.filter(function(n){
-    if(n.type === 'status' && n.text && (n.text.indexOf('เสร็จ') !== -1 || n.text.indexOf('done') !== -1)) return true;
-    if(n.type === 'progress' && n.text && n.text.indexOf('100%') !== -1) return true;
-    return false;
-  }).sort(function(a,b){ return b.date - a.date; });
+  var doneActs = t.notes.filter(isDoneActivity).sort(function(a,b){ return b.date - a.date; });
   return doneActs.length ? doneActs[0].date : null;
+}
+
+/* ===================== Edit activity-log entries (date / text) ===================== */
+function toDatetimeLocal(ms){
+  var d = new Date(ms);
+  var p2 = function(x){ return String(x).padStart(2,'0'); };
+  return d.getFullYear() + '-' + p2(d.getMonth()+1) + '-' + p2(d.getDate()) + 'T' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+}
+// One log row — normal view (with ✎ button) or inline edit form. kind: 'task' | 'todo'
+function activityItemHtml(n, kind, ownerId){
+  var m = activityTypeMeta(n.type);
+  var icon = '<div class="act-icon" style="color:' + m.color + ';">' + m.icon + '</div>';
+  if(editingActId === n.id){
+    return '<div class="act-item act-editing">' + icon +
+      '<div class="act-main"><div class="act-edit-form">' +
+        '<label class="act-edit-label">วันที่ / เวลา</label>' +
+        '<input type="datetime-local" id="f-act-date" class="act-edit-date" value="' + toDatetimeLocal(n.date) + '">' +
+        '<label class="act-edit-label">รายละเอียด</label>' +
+        '<textarea id="f-act-text" class="act-edit-text" rows="2">' + esc(n.text) + '</textarea>' +
+        '<div class="act-edit-actions">' +
+          '<button class="btn btn-ghost btn-sm" data-action="cancel-edit-activity" data-kind="' + kind + '" data-id="' + ownerId + '">ยกเลิก</button>' +
+          '<button class="btn btn-primary btn-sm" data-action="save-activity" data-kind="' + kind + '" data-id="' + ownerId + '" data-nid="' + n.id + '">บันทึก</button>' +
+        '</div>' +
+      '</div></div></div>';
+  }
+  return '<div class="act-item">' + icon +
+    '<div class="act-main"><div class="act-text">' + esc(n.text) + '</div>' +
+    '<div class="act-meta"><span>' + fmtTimestamp(n.date) + '</span><span class="act-tag">' + m.tag + '</span>' +
+      (n.edited ? '<span class="act-edited-tag">แก้ไขแล้ว</span>' : '') + '</div></div>' +
+    '<div class="act-btns">' +
+      '<button class="act-edit-btn" data-action="edit-activity" data-kind="' + kind + '" data-id="' + ownerId + '" data-nid="' + n.id + '" title="แก้ไขวันที่/รายละเอียด">&#9998;</button>' +
+      '<button class="act-edit-btn act-del-btn" data-action="delete-activity" data-kind="' + kind + '" data-id="' + ownerId + '" data-nid="' + n.id + '" title="ลบบรรทัดนี้">&#128465;</button>' +
+    '</div>' +
+  '</div>';
+}
+function refreshActivityView(kind, ownerId){
+  if(kind === 'todo'){
+    render();
+    setTimeout(function(){ // table re-renders collapsed; re-open this todo's notes panel
+      var panel = document.getElementById('tnp-' + ownerId);
+      if(panel) panel.style.display = 'table-row';
+    }, 50);
+  } else {
+    openModal(taskDetailModalHtml(ownerId));
+  }
+}
+function handleSaveActivity(kind, ownerId, nid){
+  var owner = (kind === 'todo') ? todoById(ownerId) : taskById(ownerId);
+  if(!owner || !owner.notes) return;
+  var n = owner.notes.find(function(x){ return x.id === nid; });
+  if(!n) return;
+  var dateVal = document.getElementById('f-act-date').value;
+  var textVal = document.getElementById('f-act-text').value.trim();
+  var ms = dateVal ? new Date(dateVal).getTime() : NaN;
+  if(isNaN(ms)){ alert('กรุณาระบุวันที่และเวลาให้ถูกต้อง'); return; }
+  if(ms > Date.now() + 60000){ alert('วันที่ต้องไม่เกินเวลาปัจจุบัน'); return; }
+  if(!textVal){ alert('กรุณาระบุรายละเอียด'); return; }
+  if(isDoneActivity(n)) n.done = true;   // keep recognising this entry as the completion even if its wording changes
+  n.date = ms; n.text = textVal; n.edited = true;
+  // NOTE: deliberately NOT touching owner.updatedAt — correcting history isn't a new change to the item
+  editingActId = null;
+  if(kind === 'todo') pushTodo(owner); else pushTask(owner);
+  if(kind !== 'todo') render();   // refresh table + Gantt behind the modal (completion date may have changed)
+  refreshActivityView(kind, ownerId);
+}
+function handleDeleteActivity(kind, ownerId, nid){
+  var owner = (kind === 'todo') ? todoById(ownerId) : taskById(ownerId);
+  if(!owner || !owner.notes) return;
+  var n = owner.notes.find(function(x){ return x.id === nid; });
+  if(!n) return;
+  var msg = 'ลบบรรทัดนี้ออกจากประวัติการติดตาม?\n\n"' + truncate(n.text, 60) + '"\n\nการลบนี้ไม่สามารถย้อนกลับได้';
+  if(isDoneActivity(n)) msg += '\n\n⚠️ บรรทัดนี้คือบันทึก "วันที่เสร็จ" ถ้าลบ ระบบจะไม่แสดงวันที่เสร็จจริง (และแถบล่าช้า/ก่อนแผนบน Gantt) จนกว่าจะมีบันทึกใหม่';
+  if(!confirm(msg)) return;
+  owner.notes = owner.notes.filter(function(x){ return x.id !== nid; });
+  // NOTE: updatedAt deliberately untouched — same reasoning as editing a log entry
+  if(editingActId === nid) editingActId = null;
+  if(kind === 'todo') pushTodo(owner); else pushTask(owner);
+  if(kind !== 'todo') render();
+  refreshActivityView(kind, ownerId);
 }
 
 
@@ -1590,12 +1686,7 @@ function renderTodosView(){
 
     // Inline notes panel (hidden by default, toggled via JS class)
     var notesListHtml = noteCount > 0 ? notes.slice().sort(function(a,b){ return b.date - a.date; }).map(function(n){
-      var m = activityTypeMeta(n.type);
-      return '<div class="act-item">' +
-        '<div class="act-icon" style="color:' + m.color + ';">' + m.icon + '</div>' +
-        '<div class="act-main"><div class="act-text">' + esc(n.text) + '</div>' +
-        '<div class="act-meta"><span>' + fmtTimestamp(n.date) + '</span><span class="act-tag">' + m.tag + '</span></div>' +
-        '</div></div>';
+      return activityItemHtml(n, 'todo', t.id);
     }).join('') : '';
     var notesPanelHtml = '<tr class="todo-notes-panel" id="tnp-' + t.id + '" style="display:none;">' +
       '<td colspan="8" style="padding:0; border-bottom:none;">' +
@@ -1957,6 +2048,7 @@ function openModal(html){
   document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" data-action="close-modal-overlay"><div class="modal-panel">' + html + '</div></div>';
 }
 function closeModal(){
+  editingActId = null;
   document.getElementById('modal-root').innerHTML = '';
 }
 
@@ -2069,12 +2161,7 @@ function taskDetailModalHtml(taskId){
   var dueInfo = dueRemainingInfo(t);
   var actInfo = lastActivityInfo(t);
   var actLogHtml = (t.notes && t.notes.length) ? t.notes.slice().sort(function(a,b){ return b.date - a.date; }).map(function(n){
-    var m = activityTypeMeta(n.type);
-    return '<div class="act-item">' +
-      '<div class="act-icon" style="color:' + m.color + ';">' + m.icon + '</div>' +
-      '<div class="act-main"><div class="act-text">' + esc(n.text) + '</div>' +
-      '<div class="act-meta"><span>' + fmtTimestamp(n.date) + '</span><span class="act-tag">' + m.tag + '</span></div>' +
-      '</div></div>';
+    return activityItemHtml(n, 'task', t.id);
   }).join('') : '<div style="font-size:12.5px; color:var(--ink-faint); padding:8px 0;">ยังไม่มีประวัติการติดตาม</div>';
 
   return '' +
@@ -2519,6 +2606,24 @@ document.addEventListener('click', function(e){
   var id = el.getAttribute('data-id');
 
   switch(action){
+    case 'edit-activity':
+      e.stopPropagation();
+      editingActId = el.getAttribute('data-nid');
+      refreshActivityView(el.getAttribute('data-kind'), id);
+      break;
+    case 'cancel-edit-activity':
+      e.stopPropagation();
+      editingActId = null;
+      refreshActivityView(el.getAttribute('data-kind'), id);
+      break;
+    case 'save-activity':
+      e.stopPropagation();
+      handleSaveActivity(el.getAttribute('data-kind'), id, el.getAttribute('data-nid'));
+      break;
+    case 'delete-activity':
+      e.stopPropagation();
+      handleDeleteActivity(el.getAttribute('data-kind'), id, el.getAttribute('data-nid'));
+      break;
     case 'open-person-unfinished':
       var personName = el.getAttribute('data-person');
       openModal(personUnfinishedModalHtml(personName));
