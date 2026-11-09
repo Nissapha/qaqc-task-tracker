@@ -364,7 +364,7 @@ table.tk tr.todo-notes-panel td{padding:0; background:transparent;}
 .legend-dot{width:10px; height:10px; border-radius:3px;}
 .gantt-wrap{display:flex; border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; background:var(--panel);}
 .gantt-labels{width:230px; flex-shrink:0; border-right:1.5px solid var(--line); background:#FAFCFD;}
-.gantt-label-head{height:38px; border-bottom:1.5px solid var(--line); display:flex; align-items:center; padding:0 12px; font-size:11px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.05em;}
+.gantt-label-head{height:66px; border-bottom:1.5px solid var(--line); display:flex; align-items:center; padding:0 12px; font-size:11px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.05em;}
 .gantt-label-row{height:34px; display:flex; align-items:center; padding:0 12px; border-bottom:1px solid var(--line-soft); font-size:12.5px; overflow:hidden;}
 .gantt-label-row > div{min-width:0; width:100%; overflow:hidden;}
 .gantt-label-row .glr-title{font-weight:600; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%;}
@@ -372,9 +372,11 @@ table.tk tr.todo-notes-panel td{padding:0; background:transparent;}
 .gantt-group-row{height:26px; background:var(--navy-soft); display:flex; align-items:center; padding:0 12px; font-size:11.5px; font-weight:700; color:var(--navy); border-bottom:1px solid var(--line-soft);}
 .gantt-scroll{flex:1; min-width:0;}
 .gantt-timeline{position:relative; width:100%;}
-.gantt-tick-row{height:38px; position:relative; border-bottom:1.5px solid var(--line);}
+.gantt-tick-row{height:66px; position:relative; border-bottom:1.5px solid var(--line);}
 .gantt-tick{position:absolute; top:0; bottom:0; border-left:1px solid var(--line-soft);}
-.gantt-tick-label{position:absolute; top:11px; font-size:10.5px; color:var(--ink-faint); font-family:'IBM Plex Mono'; padding-left:4px; white-space:nowrap;}
+/* Date labels run vertically (bottom → top), sitting just right of their tick line.
+   Rotation is done with transform (not writing-mode) so html2canvas can export it. */
+.gantt-tick-label{position:absolute; top:62px; margin-left:2px; font-size:10px; line-height:12px; color:var(--ink-soft); font-family:'IBM Plex Mono'; white-space:nowrap; transform-origin:0 0; transform:rotate(-90deg);}
 .gantt-body-rows{position:relative;}
 .gantt-bg-tick{position:absolute; top:0; bottom:0; border-left:1px solid var(--line-soft); z-index:0;}
 .gantt-row-track{height:34px; border-bottom:1px solid var(--line-soft); position:relative;}
@@ -386,7 +388,9 @@ table.tk tr.todo-notes-panel td{padding:0; background:transparent;}
   box-shadow:0 1px 2px rgba(0,0,0,0.15);
 }
 .gantt-today-line{position:absolute; top:0; bottom:0; width:2px; background:var(--coral); z-index:5;}
-.gantt-today-label{position:absolute; top:18px; left:5px; font-size:10px; color:var(--coral); font-weight:700; background:var(--panel); padding:1px 4px; border-radius:4px; z-index:6; white-space:nowrap;}
+.gantt-today-label{position:absolute; top:2px; transform:translateX(-50%); font-size:10px; line-height:13px; color:#fff; font-weight:700; background:var(--coral); padding:0 6px; border-radius:7px; z-index:6; white-space:nowrap;}
+.gantt-today-label.at-left{transform:none; margin-left:3px;}
+.gantt-today-label.at-right{transform:translateX(-100%); margin-left:-3px;}
 
 /* ---------- Gantt bar v2: progress fill + overrun + date flanks ---------- */
 .gantt-bar-outer{position:absolute; top:8px; height:18px; border-radius:5px; overflow:hidden; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.12); background:var(--slate-soft); z-index:2;}
@@ -1415,13 +1419,24 @@ function renderGanttSection(mode){
 
   function pct(days){ return (days/totalDays)*100; }
 
+  // Estimate the timeline's pixel width so we can skip date labels that would collide
+  // (tick lines are still drawn every Monday; only the text is thinned out when it gets crowded)
+  var ganttAppEl = document.getElementById('app');
+  var ganttViewW = (ganttAppEl && ganttAppEl.clientWidth) ? ganttAppEl.clientWidth : (window.innerWidth || 1200);
+  var ganttTimelinePx = Math.max(240, ganttViewW - 230 - 90);   // minus label column and page padding
+  var MIN_LABEL_GAP_PX = 16;                                    // rotated labels are ~12px wide
+  var lastLabelPx = -1000;
   var ticksHtml = '', tickLabelsHtml = '';
   for(var i=0;i<totalDays;i++){
     var d = addDays(rangeStart, i);
     if(i===0 || d.getDay()===1){
       var x = pct(i);
+      var xPx = (x / 100) * ganttTimelinePx;
       ticksHtml += '<div class="gantt-tick" style="left:' + x + '%;"></div>';
-      tickLabelsHtml += '<div class="gantt-tick-label" style="left:' + x + '%;">' + fmtDateShort(d) + '</div>';
+      if(xPx - lastLabelPx >= MIN_LABEL_GAP_PX){
+        tickLabelsHtml += '<div class="gantt-tick-label" style="left:' + x + '%;">' + fmtDateShort(d) + '</div>';
+        lastLabelPx = xPx;
+      }
     }
   }
   var bgTicks = '';
@@ -1437,7 +1452,8 @@ function renderGanttSection(mode){
     // body area: vertical line only (no label, so it won't overlap row content)
     todayLineHtml = '<div class="gantt-today-line" style="left:' + tx + '%;"></div>';
     // header tick row: the "วันนี้" label lives here, above the bars
-    todayTickLabelHtml = '<div class="gantt-today-line" style="left:' + tx + '%;"></div><div class="gantt-today-label" style="left:calc(' + tx + '% + 4px);">วันนี้</div>';
+    var todayEdgeCls = tx < 4 ? ' at-left' : (tx > 96 ? ' at-right' : '');
+    todayTickLabelHtml = '<div class="gantt-today-line" style="left:' + tx + '%;"></div><div class="gantt-today-label' + todayEdgeCls + '" style="left:' + tx + '%;">วันนี้</div>';
   }
 
   var projectsWithTasks = relevantProjects.filter(function(p){
