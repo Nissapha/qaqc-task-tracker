@@ -214,6 +214,8 @@ table.tk-todo td{white-space:nowrap; vertical-align:middle;}
 .field textarea{resize:vertical; min-height:60px; font-family:'IBM Plex Sans';}
 .field input:focus, .field select:focus, .field textarea:focus{outline:2px solid var(--navy); outline-offset:1px; border-color:var(--navy);}
 .field-row{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+.field-row-3{grid-template-columns:1fr 92px 1fr;}
+.field input[type=number]{width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:8px; font-size:13.5px; font-family:'IBM Plex Sans'; box-sizing:border-box;}
 .field-error{color:var(--coral); font-size:12px; margin-top:6px; display:none;}
 .field-error.show{display:block;}
 .swatches{display:flex; gap:8px; flex-wrap:wrap;}
@@ -275,17 +277,6 @@ table.tk tr.todo-row-overdue td:first-child{border-left:4px solid var(--coral);}
 /* Multi-assignee form rows */
 #f-task-assignee-rows{display:flex; flex-direction:column; gap:6px;}
 .assignee-row{display:flex; gap:6px; align-items:center;}
-.pred-list{max-height:168px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:4px;}
-.pred-item{display:flex !important; align-items:center; gap:8px; padding:6px 8px; margin:0 !important; border-radius:6px; cursor:pointer; font-weight:400 !important; font-size:13px !important; color:var(--ink) !important;}
-.pred-item:hover{background:#F2F5F8;}
-.pred-item input{flex:none; width:16px; height:16px; margin:0;}
-.pred-item .pred-title{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.pred-item .pred-date{flex:none; font-size:11.5px; color:var(--ink-faint);}
-.field input.date-locked{background:#EEF3F7; color:var(--ink-soft);}
-.pred-meta{color:var(--navy) !important;}
-.task-links{display:flex; flex-direction:column; gap:8px; margin:0 0 14px 0; padding:10px 12px; border:1px dashed var(--line); border-radius:8px;}
-.task-links .tl-label{display:block; font-size:11.5px; font-weight:700; color:var(--ink-soft); margin-bottom:4px;}
-.task-links .tl-warn{font-size:12px; color:var(--coral); font-weight:600;}
 .assignee-row .f-assignee-name{flex:1.2; padding:8px 10px; border:1px solid var(--line); border-radius:8px; font-size:13.5px; font-family:'IBM Plex Sans';}
 .assignee-row .f-assignee-dept{flex:1; padding:8px 10px; border:1px solid var(--line); border-radius:8px; font-size:13.5px; font-family:'IBM Plex Sans'; color:var(--ink-soft);}
 .assignee-remove-btn{flex-shrink:0; padding:6px 10px !important; font-size:16px !important; line-height:1; color:var(--coral) !important;}
@@ -429,6 +420,14 @@ body.gantt-dragging, body.gantt-dragging *{cursor:grabbing !important; user-sele
 .gantt-bar-outer{position:absolute; top:8px; height:18px; border-radius:5px; overflow:hidden; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.12); background:var(--slate-soft); z-index:2;}
 .gantt-bar-outer.is-group{top:4px; height:18px; border:none; box-shadow:0 1px 2px rgba(0,0,0,.15);}
 .gantt-bar-fill{position:absolute; top:0; left:0; bottom:0;}
+.gantt-bar-outer.is-draggable{touch-action:pan-y; cursor:grab;}
+.gantt-bar-outer.is-draggable::before, .gantt-bar-outer.is-draggable::after{content:''; position:absolute; top:0; bottom:0; width:9px; z-index:3; cursor:ew-resize;}
+.gantt-bar-outer.is-draggable::before{left:0;}
+.gantt-bar-outer.is-draggable::after{right:0;}
+.gantt-bar-outer.is-moving{cursor:grabbing; box-shadow:0 0 0 2px var(--navy), 0 4px 12px rgba(0,0,0,.25); z-index:5;}
+.gantt-row-track.bar-dragging .gantt-date-flank, .gantt-row-track.bar-dragging .gantt-overrun{opacity:0;}
+body.gantt-bar-dragging .gantt-bar-tip, .gantt-bar-tip{max-width:none;}
+body.gantt-bar-dragging{user-select:none; -webkit-user-select:none; cursor:grabbing;}
 .gantt-overrun{position:absolute; top:8px; height:18px; border-radius:0 5px 5px 0; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; color:#fff; cursor:pointer; z-index:2;
   background:repeating-linear-gradient(45deg, var(--coral) 0 5px, #B8412E 5px 10px); box-shadow:0 1px 2px rgba(0,0,0,.12);}
 .gantt-overrun.is-group{top:4px; height:18px;}
@@ -866,7 +865,7 @@ function renderBarHtml(item, seg, opts){
   var trackBg = isGroup && opts.groupColor ? ('background:var(--slate-soft); background:color-mix(in srgb, ' + opts.groupColor + ' 16%, white);') : '';
   var html = '';
   if(seg.hasPlan){
-    html += '<div class="gantt-bar-outer' + (isGroup?' is-group':'') + '" style="left:' + seg.planLeft + '%; width:' + seg.planWidthPx + '%; ' + trackBg + '" data-action="' + (opts.dataAction||'') + '" data-id="' + (opts.dataId||'') + '" title="' + esc(opts.tooltip||'') + '">' +
+    html += '<div class="gantt-bar-outer' + (isGroup?' is-group':'') + (opts.draggable?' is-draggable':'') + '" style="left:' + seg.planLeft + '%; width:' + seg.planWidthPx + '%; ' + trackBg + '" data-action="' + (opts.dataAction||'') + '" data-id="' + (opts.dataId||'') + '" title="' + esc(opts.tooltip||'') + '">' +
       '<div class="gantt-bar-fill" style="width:' + fillPct + '%; background:' + fillColor + ';"></div>' +
     '</div>';
   }
@@ -1313,7 +1312,6 @@ function renderProjectDetail(){
     }
     return '<tr class="task-row ' + rowCls + '" data-action="open-task-detail" data-id="' + t.id + '">' +
       '<td class="col-desc-cell"><div class="task-title">' + esc(t.title) + '</div>' +
-        (taskPredIds(t).length ? '<div class="task-meta pred-meta">&#128279; ต่อจาก: ' + taskPredIds(t).map(function(pid){ return esc(truncate(taskById(pid).title, 30)); }).join(', ') + '</div>' : '') +
         (lastN ? '<div class="task-meta">&#128172; ' + esc(truncate(lastN.text, 70)) + '</div>' : '') +
         actOrDoneHtml +
       '</td>' +
@@ -1532,7 +1530,9 @@ function renderGanttSection(mode){
         : '<div class="glr-grip-spacer"></div>') +
     '</div>';
 
-    var trackInner = renderBarHtml(t, seg, { dataAction:'open-task-detail', dataId:t.id, tooltip:tooltip });
+    var barDraggable = Number(t.progress) < 100;   // finished tasks keep their dates
+    var trackInner = renderBarHtml(t, seg, { dataAction:'open-task-detail', dataId:t.id, draggable:barDraggable,
+      tooltip: tooltip + (barDraggable ? '\n↔ ลากกลางแท่งเพื่อเลื่อนทั้งงาน · ลากขอบซ้าย/ขวาเพื่อปรับวันเริ่ม/วันส่ง' : '') });
     if(seg.hasPlan || seg.hasOverrun){
       var startLeftWidth = seg.hasPlan ? seg.planLeft : seg.overrunLeft;
       trackInner += '<div class="gantt-date-flank flank-start" style="left:0%; width:' + startLeftWidth + '%;">' + fmtDateShort(parseDateStr(t.startDate)) + '</div>';
@@ -1622,7 +1622,7 @@ function renderGanttSection(mode){
 
   var gantt = '<div class="gantt-wrap">' +
     '<div class="gantt-labels">' + labelsHtml + '</div>' +
-    '<div class="gantt-scroll"><div class="gantt-timeline">' +
+    '<div class="gantt-scroll"><div class="gantt-timeline" data-days="' + totalDays + '">' +
       '<div class="gantt-tick-row">' + ticksHtml + tickLabelsHtml + todayTickLabelHtml + '</div>' +
       rowsHtml +
     '</div></div>' +
@@ -2184,19 +2184,13 @@ function taskModalHtml(projectId, editId, copyFromId){
       '<button type="button" class="btn btn-ghost btn-sm assignee-remove-btn" data-action="remove-assignee-row" title="ลบแถวนี้">&times;</button>' +
     '</div>';
   }).join('');
-  // Predecessor links (Finish-to-Start): other tasks in this project, latest due first.
-  // Tasks that already depend on this one (directly or down the chain) are excluded to prevent loops.
-  var predSel = t ? taskPredIds(t) : [];
-  var predCands = tasks.filter(function(x){ return x.projectId === projectId && x.dueDate && (!t || (x.id !== t.id && !isTaskDownstream(t.id, x.id))); })
+  // "Start after previous task" picker: other tasks in this project, latest due date first
+  var chainCands = tasks.filter(function(x){ return x.projectId === projectId && x.dueDate && (!t || x.id !== t.id); })
     .sort(function(a,b){ return b.dueDate.localeCompare(a.dueDate); });
-  var predLocked = predSel.length > 0;
-  var predHtml = predCands.length ? '<div class="field"><label>&#128279; ต่อจากงาน (Predecessor) <span style="color:var(--ink-faint); font-weight:400;">(ไม่บังคับ · เลือกได้หลายงาน — งานนี้จะเริ่มวันถัดจากงานที่เลือกเสร็จครบทุกงาน และเลื่อนตามอัตโนมัติ)</span></label>' +
-    '<div class="pred-list" id="f-task-preds">' +
-    predCands.map(function(x){
-      return '<label class="pred-item"><input type="checkbox" value="' + x.id + '" data-action="toggle-pred"' + (predSel.indexOf(x.id) !== -1 ? ' checked' : '') + '>' +
-        '<span class="pred-title">' + esc(truncate(x.title, 60)) + '</span><span class="pred-date">ส่ง ' + fmtDateThai(x.dueDate) + '</span></label>';
-    }).join('') +
-    '</div><div id="f-task-chain-hint" style="font-size:12px; color:var(--teal); margin-top:4px;">' + (predLocked ? '&#128274; วันเริ่มถูกกำหนดจากงานก่อนหน้า (ปรับระยะเวลาได้ที่วันกำหนดส่ง)' : '') + '</div></div>' : '';
+  var chainHtml = chainCands.length ? '<div class="field"><label>&#9193; เริ่มต่อจากงานก่อนหน้า <span style="color:var(--ink-faint); font-weight:400;">(ไม่บังคับ — เลือกแล้ววันเริ่มจะเป็นวันถัดจากวันกำหนดส่งของงานนั้น)</span></label>' +
+    '<select id="f-task-chain" data-action="chain-prev-task"><option value="">— ไม่ใช้ / กรอกวันที่เอง —</option>' +
+    chainCands.map(function(x){ return '<option value="' + x.id + '">' + esc(truncate(x.title, 60)) + ' (ส่ง ' + fmtDateThai(x.dueDate) + ')</option>'; }).join('') +
+    '</select><div id="f-task-chain-hint" style="font-size:12px; color:var(--teal); margin-top:4px;"></div></div>' : '';
   return '' +
   '<div class="modal-head"><h3>' + (t ? 'แก้ไขงาน' : (src ? 'คัดลอกงาน' : 'เพิ่มงานใหม่')) + '</h3><button class="modal-close" data-action="close-modal">&times;</button></div>' +
   '<div class="modal-body">' +
@@ -2205,11 +2199,13 @@ function taskModalHtml(projectId, editId, copyFromId){
       '<div id="f-task-assignee-rows">' + assigneeRowsHtml + '</div>' +
       '<button type="button" class="btn btn-ghost btn-sm" data-action="add-assignee-row" style="margin-top:6px;">+ เพิ่มผู้รับผิดชอบ</button>' +
     '</div>' +
-    '<div class="field-row">' +
-      '<div class="field"><label>วันเริ่มต้น *</label><input type="date" id="f-task-start" value="' + (pre?(pre.startDate||''):'') + '"' + (predLocked ? ' readonly class="date-locked"' : '') + '></div>' +
+    '<div class="field-row field-row-3">' +
+      '<div class="field"><label>วันเริ่มต้น *</label><input type="date" id="f-task-start" value="' + (pre?(pre.startDate||''):'') + '"></div>' +
+      '<div class="field"><label>จำนวนวัน</label><input type="number" id="f-task-days" min="1" step="1" inputmode="numeric" placeholder="วัน" value="' + (pre && durationDaysOf(pre.startDate, pre.dueDate) > 0 ? durationDaysOf(pre.startDate, pre.dueDate) : '') + '"></div>' +
       '<div class="field"><label>วันกำหนดส่ง *</label><input type="date" id="f-task-due" value="' + (pre?(pre.dueDate||''):'') + '"></div>' +
     '</div>' +
-    predHtml +
+    '<div style="font-size:11.5px; color:var(--ink-faint); margin:-6px 0 12px 0;">&#128161; ใส่วันเริ่ม + จำนวนวัน แล้วระบบคำนวณวันกำหนดส่งให้ (นับวันเริ่มเป็นวันที่ 1) หรือจะเลือกวันกำหนดส่งเองก็ได้</div>' +
+    chainHtml +
     '<div class="field"><label>ความคืบหน้า</label><select id="f-task-progress">' +
       [0,25,50,75,100].map(function(v){
         var labelMap = {0:'0% — ยังไม่ได้ดำเนินการ',25:'25% — กำลังดำเนินการ',50:'50% — กำลังดำเนินการ',75:'75% — กำลังดำเนินการ',100:'100% — ดำเนินการเรียบร้อย'};
@@ -2249,19 +2245,6 @@ function personUnfinishedModalHtml(personName){
   '</div>' +
   '<div class="modal-foot"><button class="btn btn-ghost" data-action="close-modal">ปิด</button></div>';
 }
-// Predecessor / successor summary for the task detail modal (+ warning if it starts before a predecessor finishes)
-function taskLinksHtml(t){
-  var preds = taskPredIds(t), succs = taskSuccessors(t.id);
-  if(!preds.length && !succs.length) return '';
-  var lp = latestPredecessor(preds);
-  var conflict = lp && t.startDate && t.startDate <= lp.dueDate;
-  var names = function(list){ return list.map(function(x){ return '<span class="assignee-chip">' + esc(truncate(x.title, 40)) + '</span>'; }).join(''); };
-  return '<div class="task-links">' +
-    (preds.length ? '<div><span class="tl-label">&#128279; ต่อจาก</span><div class="assignee-chip-wrap">' + names(preds.map(taskById)) + '</div></div>' : '') +
-    (succs.length ? '<div><span class="tl-label">&#10145;&#65039; งานถัดไป</span><div class="assignee-chip-wrap">' + names(succs) + '</div></div>' : '') +
-    (conflict ? '<div class="tl-warn">&#9888;&#65039; งานนี้เริ่มก่อนที่ "' + esc(truncate(lp.title, 40)) + '" จะครบกำหนด (' + fmtDateThai(lp.dueDate) + ') — ระบบไม่เลื่อนให้อัตโนมัติเพราะงานเริ่มดำเนินการแล้ว</div>' : '') +
-  '</div>';
-}
 function taskDetailModalHtml(taskId){
   var t = taskById(taskId);
   if(!t) return '';
@@ -2286,7 +2269,6 @@ function taskDetailModalHtml(taskId){
       '<div class="tdm-item"><div class="tdm-label">วันเริ่มต้น</div><div class="tdm-value">' + fmtDateThai(t.startDate) + '</div></div>' +
       '<div class="tdm-item"><div class="tdm-label">วันกำหนดส่ง</div><div class="tdm-value">' + fmtDateThai(t.dueDate) + '</div></div>' +
     '</div>' +
-    taskLinksHtml(t) +
     '<div class="section-label">อัปเดตความคืบหน้า</div>' +
     '<select id="f-detail-progress" style="width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:8px; font-size:13.5px; font-family:IBM Plex Sans;">' +
       [0,25,50,75,100].map(function(v){
@@ -2342,93 +2324,45 @@ function handleSaveProject(editId){
   render();
 }
 
-/* ===================== Task dependencies (Finish-to-Start) =====================
-   task.predecessors = [taskId, ...] (optional). A linked task starts the day after the LATEST due date
-   among its predecessors, so parallel branches merge naturally:
-     A → B, A → C  (B and C both start after A — run in parallel)
-     B, C → D      (D waits until both B and C are finished)
-   When a task's dates change, not-started successors (progress 0) shift with it, keeping their duration.
-   Tasks already in progress / done are never moved automatically. */
-function taskPredIds(t){
-  if(!t || !t.predecessors) return [];
-  var raw = Array.isArray(t.predecessors) ? t.predecessors : Object.keys(t.predecessors).map(function(k){ return t.predecessors[k]; });
-  return raw.filter(function(id, i){
-    var p = taskById(id);
-    return id !== t.id && raw.indexOf(id) === i && p && p.projectId === t.projectId;   // ignore deleted / foreign / duplicate links
-  });
-}
-function taskSuccessors(taskId){
-  return tasks.filter(function(x){ return taskPredIds(x).indexOf(taskId) !== -1; });
-}
-// Is candidateId somewhere downstream of rootId? (linking root → candidate would create a loop)
-function isTaskDownstream(rootId, candidateId){
-  var seen = {}, queue = [rootId];
-  while(queue.length){
-    var cur = queue.shift();
-    if(seen[cur]) continue;
-    seen[cur] = true;
-    var succ = taskSuccessors(cur);
-    for(var i=0;i<succ.length;i++){
-      if(succ[i].id === candidateId) return true;
-      queue.push(succ[i].id);
-    }
+// Fill the task form so it starts the day after the chosen task's due date, keeping the current duration.
+// Form-only helper: nothing extra is stored in Firebase.
+// Keep start / number-of-days / due in the task form consistent. src = id of the field the user just changed.
+// Days are inclusive (start day counts as day 1). Nothing extra is stored — "days" is derived from the two dates.
+function syncTaskDuration(src){
+  var startEl = document.getElementById('f-task-start');
+  var daysEl = document.getElementById('f-task-days');
+  var dueEl = document.getElementById('f-task-due');
+  if(!startEl || !daysEl || !dueEl) return;
+  var n = parseInt(daysEl.value, 10);
+  var hasDays = !isNaN(n) && n >= 1;
+  if(src === 'f-task-due'){
+    daysEl.value = (startEl.value && dueEl.value && dueEl.value >= startEl.value) ? durationDaysOf(startEl.value, dueEl.value) : '';
+  } else if(startEl.value && hasDays){
+    dueEl.value = toDateStr(addDays(parseDateStr(startEl.value), n - 1));
+  } else if(src === 'f-task-start' && startEl.value && dueEl.value && dueEl.value >= startEl.value){
+    daysEl.value = durationDaysOf(startEl.value, dueEl.value);
   }
-  return false;
 }
-// Latest-finishing predecessor among ids (or null)
-function latestPredecessor(predIds){
-  var best = null;
-  predIds.forEach(function(id){
-    var p = taskById(id);
-    if(p && p.dueDate && (!best || p.dueDate > best.dueDate)) best = p;
-  });
-  return best;
-}
-// Shift not-started successors of the given tasks, recursively. Returns the tasks that changed (caller pushes them).
-function cascadeTaskDates(changedIds){
-  var changed = [], queue = changedIds.slice(), guard = 0;
-  while(queue.length && guard++ < 5000){
-    var srcId = queue.shift();
-    taskSuccessors(srcId).forEach(function(s){
-      if(Number(s.progress) !== 0 || !s.startDate || !s.dueDate) return;
-      var lp = latestPredecessor(taskPredIds(s));
-      if(!lp) return;
-      var newStart = toDateStr(addDays(parseDateStr(lp.dueDate), 1));
-      if(newStart === s.startDate) return;
-      var dur = Math.max(0, dayDiff(parseDateStr(s.startDate), parseDateStr(s.dueDate)));
-      var oldS = s.startDate, oldE = s.dueDate;
-      s.startDate = newStart;
-      s.dueDate = toDateStr(addDays(parseDateStr(newStart), dur));
-      s.updatedAt = Date.now();
-      addActivity(s, 'schedule', 'เลื่อนตามงานก่อนหน้า "' + lp.title + '" — ' +
-        fmtDateThai(oldS) + ' – ' + fmtDateThai(oldE) + ' → ' + fmtDateThai(s.startDate) + ' – ' + fmtDateThai(s.dueDate));
-      if(changed.indexOf(s) === -1) changed.push(s);
-      queue.push(s.id);
-    });
-  }
-  return changed;
-}
-// Form helper: re-compute the start date whenever the predecessor checkboxes change (duration is kept)
-function applyPredSelection(){
+
+function applyChainStart(prevId){
   var hint = document.getElementById('f-task-chain-hint');
   var startEl = document.getElementById('f-task-start');
   var dueEl = document.getElementById('f-task-due');
-  if(!startEl || !dueEl) return;
-  var ids = Array.prototype.map.call(document.querySelectorAll('#f-task-preds input:checked'), function(cb){ return cb.value; });
-  var lp = latestPredecessor(ids);
-  if(!lp){
-    startEl.readOnly = false; startEl.classList.remove('date-locked');
-    if(hint) hint.textContent = '';
-    return;
-  }
+  if(hint) hint.textContent = '';
+  var prev = prevId ? taskById(prevId) : null;
+  if(!prev || !prev.dueDate || !startEl || !dueEl) return;
   var dur = (startEl.value && dueEl.value && dueEl.value >= startEl.value) ? dayDiff(parseDateStr(startEl.value), parseDateStr(dueEl.value)) : null;
-  startEl.value = toDateStr(addDays(parseDateStr(lp.dueDate), 1));
-  startEl.readOnly = true; startEl.classList.add('date-locked');
-  if(dur !== null) dueEl.value = toDateStr(addDays(parseDateStr(startEl.value), dur));
-  else if(dueEl.value && dueEl.value < startEl.value) dueEl.value = '';
+  var newStart = addDays(parseDateStr(prev.dueDate), 1);
+  startEl.value = toDateStr(newStart);
+  if(dur !== null){
+    dueEl.value = toDateStr(addDays(newStart, dur));
+  } else if(dueEl.value && dueEl.value < startEl.value){
+    dueEl.value = '';
+  }
+  syncTaskDuration('f-task-due');
   if(hint){
-    hint.textContent = '🔒 เริ่ม ' + fmtDateThai(startEl.value) + ' (ถัดจาก "' + truncate(lp.title, 40) + '"' + (ids.length > 1 ? ' ซึ่งเสร็จช้าที่สุดใน ' + ids.length + ' งานที่เลือก' : '') + ')' +
-      (dur !== null ? ' · คงระยะเวลา ' + (dur + 1) + ' วัน → ส่ง ' + fmtDateThai(dueEl.value) : (dueEl.value ? '' : ' · กรุณาใส่วันกำหนดส่ง'));
+    hint.textContent = '✓ เริ่ม ' + fmtDateThai(startEl.value) + ' (ถัดจากวันส่งของ "' + truncate(prev.title, 40) + '")' +
+      (dur !== null ? ' · คงระยะเวลาเดิม ' + (dur + 1) + ' วัน → ส่ง ' + fmtDateThai(dueEl.value) : (dueEl.value ? '' : ' · กรุณาใส่วันกำหนดส่ง'));
   }
 }
 
@@ -2447,7 +2381,6 @@ function handleSaveTask(projectId, editId, copyFromId){
   var due = document.getElementById('f-task-due').value;
   var progress = document.getElementById('f-task-progress').value;
   var errEl = document.getElementById('f-task-error');
-  var predIds = Array.prototype.map.call(document.querySelectorAll('#f-task-preds input:checked'), function(cb){ return cb.value; });
 
   if(!title || !assignees.length || !start || !due){
     errEl.textContent = 'กรุณากรอกข้อมูลให้ครบ: ชื่องาน ผู้รับผิดชอบอย่างน้อย 1 คน วันเริ่มต้น และวันกำหนดส่ง';
@@ -2466,25 +2399,18 @@ function handleSaveTask(projectId, editId, copyFromId){
     task = taskById(editId);
     if(task){
       var oldProgress = Number(task.progress);
-      var oldPredKey = taskPredIds(task).slice().sort().join(',');
       task.title = title; task.assignees = assignees; delete task.assignee; task.startDate = start; task.dueDate = due; task.progress = Number(progress); task.updatedAt = Date.now();
-      if(predIds.length) task.predecessors = predIds; else delete task.predecessors;
-      if(predIds.slice().sort().join(',') !== oldPredKey){
-        addActivity(task, 'schedule', predIds.length ? ('ตั้งลิงก์ต่อจากงาน: ' + predIds.map(function(pid){ var x = taskById(pid); return x ? '"' + x.title + '"' : ''; }).join(', ')) : 'ยกเลิกลิงก์งานก่อนหน้า');
-      }
       if(Number(progress) !== oldProgress){
         addActivity(task, 'progress', 'ปรับความคืบหน้า ' + oldProgress + '% → ' + Number(progress) + '%');
       }
     }
   } else {
     task = { id: uid('task'), projectId: projectId, title: title, assignees: assignees, startDate: start, dueDate: due, progress: Number(progress), notes: [], createdAt: Date.now() };
-    if(predIds.length) task.predecessors = predIds;
     var copySrcTask = copyFromId ? taskById(copyFromId) : null;
     addActivity(task, 'created', 'สร้างงาน' + (copySrcTask ? ' โดยคัดลอกจาก "' + copySrcTask.title + '"' : '') + ' (ความคืบหน้าเริ่มต้น ' + Number(progress) + '%)');
     tasks.push(task);
   }
   pushTask(task);
-  if(editId && task) cascadeTaskDates([task.id]).forEach(pushTask);
   closeModal();
   render();
 }
@@ -2820,7 +2746,6 @@ function reorderNotStartedTasks(projectId, newOrderIds){
     t.order = i;   // tie-breaker for tasks that share the same start date
     if(datesChanged || orderChanged) changed.push(t);
   });
-  cascadeTaskDates(changed.map(function(t){ return t.id; })).forEach(function(t){ if(changed.indexOf(t) === -1) changed.push(t); });
   changed.forEach(pushTask);
   render();
 }
@@ -2922,9 +2847,118 @@ document.addEventListener('pointerdown', function(e){
   ganttDragUpdate();
 }, false);
 
+/* ===================== Drag Gantt bars to re-schedule =====================
+   Middle of a bar → move the whole task (duration kept). Left / right edge → change start / due only.
+   Mouse, pen and touch (touch-action:pan-y keeps vertical page scroll working). A short tap still opens the task.
+   Done tasks (100%) are not draggable. Esc cancels. */
+var barDrag = null;
+var barDragSuppressClick = false;
+
+function barDragDates(d){
+  var t = d.task, s = parseDateStr(t.startDate), e = parseDateStr(t.dueDate);
+  if(d.mode === 'move') return { s: toDateStr(addDays(s, d.delta)), e: toDateStr(addDays(e, d.delta)) };
+  if(d.mode === 'start') return { s: toDateStr(addDays(s, d.delta)), e: t.dueDate };
+  return { s: t.startDate, e: toDateStr(addDays(e, d.delta)) };
+}
+function barDragMove(e){
+  var d = barDrag; if(!d || e.pointerId !== d.pointerId) return;
+  var dx = e.clientX - d.x0;
+  if(!d.active){
+    if(Math.abs(dx) < 6) return;                 // still a tap / click
+    d.active = true;
+    document.body.classList.add('gantt-bar-dragging');
+    d.track.classList.add('bar-dragging');
+    d.bar.classList.add('is-moving');
+    d.tip = document.createElement('div');
+    d.tip.className = 'gantt-drag-ghost gantt-bar-tip';
+    document.body.appendChild(d.tip);
+  }
+  var delta = Math.round(dx / d.pxPerDay);
+  var dur = d.dur0;                               // inclusive days
+  if(d.mode === 'start' && delta > dur - 1) delta = dur - 1;       // keep at least 1 day
+  if(d.mode === 'end' && delta < -(dur - 1)) delta = -(dur - 1);
+  d.delta = delta;
+  var dayPct = 100 / d.totalDays;
+  if(d.mode === 'move') d.bar.style.left = (d.left0 + delta * dayPct) + '%';
+  else if(d.mode === 'start'){ d.bar.style.left = (d.left0 + delta * dayPct) + '%'; d.bar.style.width = Math.max(dayPct, d.width0 - delta * dayPct) + '%'; }
+  else d.bar.style.width = Math.max(dayPct, d.width0 + delta * dayPct) + '%';
+  var nd = barDragDates(d);
+  var shift = delta === 0 ? 'ไม่เปลี่ยน' : ((delta > 0 ? '+' : '') + delta + ' วัน');
+  d.tip.textContent = (d.mode === 'move' ? '↔ ' : (d.mode === 'start' ? '⇤ ' : '⇥ ')) +
+    fmtDateThai(nd.s) + ' – ' + fmtDateThai(nd.e) + ' (' + durationDaysOf(nd.s, nd.e) + ' วัน) · ' + shift;
+  d.tip.style.left = Math.min(e.clientX + 14, (window.innerWidth || 1200) - 360) + 'px';
+  d.tip.style.top = (e.clientY - 40) + 'px';
+}
+function barDragCleanup(){
+  var d = barDrag; if(!d) return;
+  if(d.tip && d.tip.parentNode) d.tip.parentNode.removeChild(d.tip);
+  document.body.classList.remove('gantt-bar-dragging');
+  document.removeEventListener('pointermove', barDragMove);
+  document.removeEventListener('pointerup', barDragEnd);
+  document.removeEventListener('pointercancel', barDragCancel);
+  document.removeEventListener('keydown', barDragKey);
+  barDrag = null;
+}
+function barDragEnd(e){
+  var d = barDrag; if(!d || (e && e.pointerId !== d.pointerId)) return;
+  var wasActive = d.active, delta = d.delta;
+  var nd = barDragDates(d);
+  barDragCleanup();
+  if(!wasActive) return;                          // plain click → let it open the task
+  // the browser fires "click" right after this pointerup — swallow just that one
+  barDragSuppressClick = true;
+  setTimeout(function(){ barDragSuppressClick = false; }, 0);
+  var t = d.task;
+  if(delta !== 0 && taskById(t.id)){
+    var oldS = t.startDate, oldE = t.dueDate;
+    t.startDate = nd.s; t.dueDate = nd.e; t.updatedAt = Date.now();
+    addActivity(t, 'schedule', 'ปรับกำหนดการจาก Gantt — ' + fmtDateThai(oldS) + ' – ' + fmtDateThai(oldE) +
+      ' → ' + fmtDateThai(nd.s) + ' – ' + fmtDateThai(nd.e) + ' (' + durationDaysOf(nd.s, nd.e) + ' วัน)');
+    pushTask(t);
+  }
+  render();
+}
+function barDragCancel(){ var was = barDrag && barDrag.active; barDragCleanup(); if(was) render(); }
+function barDragKey(e){ if(e.key === 'Escape') barDragCancel(); }
+
+document.addEventListener('pointerdown', function(e){
+  var bar = e.target && e.target.closest ? e.target.closest('.gantt-bar-outer.is-draggable') : null;
+  if(!bar || barDrag || ganttDrag) return;
+  if(e.pointerType === 'mouse' && e.button !== 0) return;
+  var t = taskById(bar.getAttribute('data-id'));
+  var tl = bar.closest('.gantt-timeline');
+  if(!t || !t.startDate || !t.dueDate || !tl) return;
+  var totalDays = Number(tl.getAttribute('data-days')) || 1;
+  var r = bar.getBoundingClientRect();
+  var edge = r.width >= 24 ? 9 : 0;               // tiny bars: move only
+  var mode = (edge && e.clientX - r.left <= edge) ? 'start' : ((edge && r.right - e.clientX <= edge) ? 'end' : 'move');
+  barDrag = {
+    task: t, bar: bar, track: bar.parentNode, mode: mode, x0: e.clientX, pointerId: e.pointerId,
+    pxPerDay: Math.max(1, tl.getBoundingClientRect().width / totalDays), totalDays: totalDays,
+    left0: parseFloat(bar.style.left) || 0, width0: parseFloat(bar.style.width) || 0,
+    dur0: durationDaysOf(t.startDate, t.dueDate) || 1, delta: 0, active: false, tip: null
+  };
+  document.addEventListener('pointermove', barDragMove);
+  document.addEventListener('pointerup', barDragEnd);
+  document.addEventListener('pointercancel', barDragCancel);
+  document.addEventListener('keydown', barDragKey);
+}, false);
+// After a drag, swallow the click that the browser fires on release (so the task modal doesn't pop open)
+window.addEventListener('click', function(e){
+  if(barDragSuppressClick){
+    barDragSuppressClick = false;
+    e.stopPropagation();
+    e.preventDefault();
+  }
+}, true);
+
 /* ===================== Event delegation ===================== */
 var todoSearchDebounce = null;
 document.addEventListener('input', function(e){
+  if(e.target && (e.target.id === 'f-task-start' || e.target.id === 'f-task-days' || e.target.id === 'f-task-due')){
+    syncTaskDuration(e.target.id);
+    return;
+  }
   if(e.target && e.target.id === 'todo-assignee-search'){
     todoFilterAssignee = e.target.value;
     var cursorPos = e.target.selectionStart;
@@ -3242,8 +3276,8 @@ document.addEventListener('change', function(e){
     render();
     return;
   }
-  if(action === 'toggle-pred'){
-    applyPredSelection();
+  if(action === 'chain-prev-task'){
+    applyChainStart(e.target.value);
     return;
   }
   if(action === 'todo-status-select'){
