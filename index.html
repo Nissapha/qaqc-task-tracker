@@ -363,10 +363,32 @@ table.tk tr.todo-notes-panel td{padding:0; background:transparent;}
 .legend-item{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink-soft);}
 .legend-dot{width:10px; height:10px; border-radius:3px;}
 .gantt-wrap{display:flex; border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; background:var(--panel);}
-.gantt-labels{width:230px; flex-shrink:0; border-right:1.5px solid var(--line); background:#FAFCFD;}
+.gantt-labels{width:264px; flex-shrink:0; border-right:1.5px solid var(--line); background:#FAFCFD;}
 .gantt-label-head{height:66px; border-bottom:1.5px solid var(--line); display:flex; align-items:center; padding:0 12px; font-size:11px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.05em;}
 .gantt-label-row{height:34px; display:flex; align-items:center; padding:0 12px; border-bottom:1px solid var(--line-soft); font-size:12.5px; overflow:hidden;}
-.gantt-label-row > div{min-width:0; width:100%; overflow:hidden;}
+.gantt-label-row{gap:8px;}
+.gantt-label-head{gap:8px;}
+.glh-main{flex:1; min-width:0;}
+.glh-days{flex:0 0 44px; text-align:right;}
+.glr-main{flex:1; min-width:0; overflow:hidden;}
+.glr-days{flex:0 0 44px; text-align:right; font-family:'IBM Plex Mono'; font-size:12px; font-weight:600; color:var(--ink-soft); white-space:nowrap;}
+.glr-days small{font-size:9.5px; font-weight:500; color:var(--ink-faint); margin-left:2px;}
+.ggr-days{flex:0 0 44px; text-align:right; font-family:'IBM Plex Mono'; font-size:11px; font-weight:700; white-space:nowrap;}
+.ggr-days small{font-size:9px; font-weight:500; opacity:.7; margin-left:2px;}
+.glr-grip-spacer{flex:0 0 24px;}
+.glr-grip{flex:0 0 24px; height:24px; display:flex; align-items:center; justify-content:center; font-size:15px; line-height:1; border-radius:6px; cursor:grab; opacity:.6; touch-action:none; user-select:none; -webkit-user-select:none;}
+.glr-grip:hover{background:var(--slate-soft); opacity:1;}
+.gantt-label-row.is-dragging{opacity:.4; background:var(--navy-soft);}
+body.gantt-dragging, body.gantt-dragging *{cursor:grabbing !important; user-select:none !important; -webkit-user-select:none !important;}
+.gantt-drop-line{position:fixed; height:3px; background:var(--navy); border-radius:2px; z-index:9999; pointer-events:none; box-shadow:0 0 0 2px rgba(28,63,95,0.18);}
+.gantt-drag-ghost{position:fixed; z-index:10000; pointer-events:none; background:var(--navy); color:#fff; font-size:12px; font-weight:600; padding:6px 10px; border-radius:8px; max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; box-shadow:0 6px 18px rgba(0,0,0,0.25);}
+@media (max-width:600px){
+  .gantt-labels{width:206px;}
+  .glh-days, .glr-days, .ggr-days{flex-basis:34px;}
+  .glr-days small, .ggr-days small{display:none;}
+  .glr-grip, .glr-grip-spacer{flex-basis:22px;}
+  .gantt-label-row, .gantt-label-head{gap:6px;}
+}
 .gantt-label-row .glr-title{font-weight:600; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%;}
 .gantt-label-row .glr-sub{font-size:10.5px; color:var(--ink-faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;}
 .gantt-group-row{height:26px; background:var(--navy-soft); display:flex; align-items:center; padding:0 12px; font-size:11.5px; font-weight:700; color:var(--navy); border-bottom:1px solid var(--line-soft);}
@@ -1044,10 +1066,22 @@ function activityTypeMeta(type){
   if(type === 'progress') return { icon:'&#128200;', color:'var(--amber)', tag:'ความคืบหน้า' };
   if(type === 'status')   return { icon:'&#128260;', color:'var(--navy)', tag:'สถานะ' };
   if(type === 'created')  return { icon:'&#10024;', color:'var(--teal)', tag:'สร้างงาน' };
+  if(type === 'schedule') return { icon:'&#128197;', color:'var(--navy)', tag:'กำหนดการ' };
   return { icon:'&#128172;', color:'var(--slate)', tag:'บันทึก' };
 }
 function sortByStartDate(list){
-  return list.slice().sort(function(a,b){ return (a.startDate||'9999').localeCompare(b.startDate||'9999'); });
+  return list.slice().sort(function(a,b){
+    var c = (a.startDate||'9999').localeCompare(b.startDate||'9999');
+    if(c !== 0) return c;
+    // same start date → honour a manual drag order if both tasks have one
+    if(typeof a.order === 'number' && typeof b.order === 'number') return a.order - b.order;
+    return 0;
+  });
+}
+// Planned duration in days, counting both the start day and the due day (same rule as the Excel export)
+function durationDaysOf(startStr, dueStr){
+  if(!startStr || !dueStr) return null;
+  return dayDiff(parseDateStr(startStr), parseDateStr(dueStr)) + 1;
 }
 
 /* ===================== Render root ===================== */
@@ -1423,7 +1457,8 @@ function renderGanttSection(mode){
   // (tick lines are still drawn every Monday; only the text is thinned out when it gets crowded)
   var ganttAppEl = document.getElementById('app');
   var ganttViewW = (ganttAppEl && ganttAppEl.clientWidth) ? ganttAppEl.clientWidth : (window.innerWidth || 1200);
-  var ganttTimelinePx = Math.max(240, ganttViewW - 230 - 90);   // minus label column and page padding
+  var ganttLabelColW = (window.innerWidth <= 600) ? 206 : 264;   // keep in sync with .gantt-labels width in CSS
+  var ganttTimelinePx = Math.max(240, ganttViewW - ganttLabelColW - 90);   // minus label column and page padding
   var MIN_LABEL_GAP_PX = 16;                                    // rotated labels are ~12px wide
   var lastLabelPx = -1000;
   var ticksHtml = '', tickLabelsHtml = '';
@@ -1468,14 +1503,22 @@ function renderGanttSection(mode){
     return acc + 26 + (collapsed ? 0 : n*34);
   },0) : relevantTasks.length*34;
 
-  var labelsHtml = '<div class="gantt-label-head">PROJECT / TASK</div>';
+  var labelsHtml = '<div class="gantt-label-head"><span class="glh-main">PROJECT / TASK</span><span class="glh-days">วัน</span><span class="glr-grip-spacer"></span></div>';
   var rowsHtml = '<div class="gantt-body-rows" style="min-height:' + bodyHeight + 'px;">' + bgTicks + todayLineHtml;
 
   function renderTaskRow(t){
     var note = latestNote(t);
     var seg = buildBarSegments(t, rangeStart, rangeEnd, totalDays);
     var tooltip = t.title + ' (' + t.progress + '%)' + (note ? ' — ' + truncate(note.text, 60) : '');
-    labelsHtml += '<div class="gantt-label-row" title="' + esc(t.title) + ' — ' + esc(taskAssigneeDisplay(t)) + '"><div><div class="glr-title">' + esc(t.title) + '</div><div class="glr-sub">' + esc(taskAssigneeNamesShort(t)) + '</div></div></div>';
+    var rowDur = durationDaysOf(t.startDate, t.dueDate);
+    var rowDraggable = Number(t.progress) === 0;   // only not-started tasks can be re-ordered
+    labelsHtml += '<div class="gantt-label-row' + (rowDraggable ? ' is-draggable' : '') + '" data-task-id="' + t.id + '" data-pid="' + t.projectId + '"' + (rowDraggable ? ' data-ns="1"' : '') + ' title="' + esc(t.title) + ' — ' + esc(taskAssigneeDisplay(t)) + '">' +
+      '<div class="glr-main"><div class="glr-title">' + esc(t.title) + '</div><div class="glr-sub">' + esc(taskAssigneeNamesShort(t)) + '</div></div>' +
+      '<div class="glr-days">' + (rowDur ? rowDur + '<small>วัน</small>' : '–') + '</div>' +
+      (rowDraggable
+        ? '<div class="glr-grip" title="กดค้างแล้วลากเพื่อสลับลำดับงาน (วันเริ่ม/วันส่งจะสลับตามตำแหน่ง)">&#9995;</div>'
+        : '<div class="glr-grip-spacer"></div>') +
+    '</div>';
 
     var trackInner = renderBarHtml(t, seg, { dataAction:'open-task-detail', dataId:t.id, tooltip:tooltip });
     if(seg.hasPlan || seg.hasOverrun){
@@ -1539,6 +1582,8 @@ function renderGanttSection(mode){
         '<span class="ggr-dot" style="background:' + p.color + '"></span>' +
         '<span class="ggr-name" title="' + esc(p.name) + '">' + esc(p.name) + '</span>' +
         (agg ? '<span class="ggr-pct">' + agg.progress + '%</span>' : '') +
+        '<span class="ggr-days">' + (agg ? (durationDaysOf(agg.startDate, agg.dueDate) + '<small>วัน</small>') : '') + '</span>' +
+        '<span class="glr-grip-spacer"></span>' +
       '</div>';
 
       var groupTrackInner = '';
@@ -2485,6 +2530,9 @@ function exportProjectGantt(pid){
     // 2) Hide the "today" vertical line(s) + label(s) — rendered in both tick-row and body-rows
     var todayEls = wrap.querySelectorAll('.gantt-today-line, .gantt-today-label');
     for(var ti=0; ti<todayEls.length; ti++){ setStyle(todayEls[ti], 'display', 'none'); }
+    // 2b) Hide the ✋ drag handles (keep their space so the columns don't shift)
+    var gripEls = wrap.querySelectorAll('.glr-grip');
+    for(var gi=0; gi<gripEls.length; gi++){ setStyle(gripEls[gi], 'visibility', 'hidden'); }
 
     // 3) Replace striped overrun gradient (html2canvas can't render repeating-linear-gradient) with solid coral
     var overruns = wrap.querySelectorAll('.gantt-overrun');
@@ -2596,6 +2644,132 @@ function roundRect(ctx, x, y, w, h, r){
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
 }
+
+/* ===================== Drag to re-order NOT-STARTED tasks (Gantt) =====================
+   Press-and-hold the ✋ handle, drag the row to a new position inside the same project, release.
+   Dates follow positions: the project's not-started tasks keep the same set of (start, due) "slots",
+   but each slot is handed to whichever task now sits at that position. Pointer events → works with mouse and touch. */
+var ganttDrag = null;
+
+function reorderNotStartedTasks(projectId, newOrderIds){
+  var items = newOrderIds.map(taskById).filter(function(t){ return t && t.startDate && t.dueDate; });
+  if(items.length < 2) return;
+  // the chronological list of slots currently used by these tasks
+  var slots = items.map(function(t){ return { s:t.startDate, e:t.dueDate }; })
+    .sort(function(a,b){ return a.s.localeCompare(b.s) || a.e.localeCompare(b.e); });
+  var changed = [];
+  items.forEach(function(t, i){
+    var slot = slots[i], oldS = t.startDate, oldE = t.dueDate;
+    var datesChanged = (oldS !== slot.s || oldE !== slot.e);
+    if(datesChanged){
+      t.startDate = slot.s; t.dueDate = slot.e; t.updatedAt = Date.now();
+      addActivity(t, 'schedule', 'สลับลำดับงาน — ปรับกำหนดการ ' +
+        fmtDateThai(oldS) + ' – ' + fmtDateThai(oldE) + ' → ' + fmtDateThai(slot.s) + ' – ' + fmtDateThai(slot.e));
+    }
+    var orderChanged = (t.order !== i);
+    t.order = i;   // tie-breaker for tasks that share the same start date
+    if(datesChanged || orderChanged) changed.push(t);
+  });
+  changed.forEach(pushTask);
+  render();
+}
+
+function ganttDragInsertIndex(y){
+  var rows = ganttDrag.rows;
+  for(var i=0;i<rows.length;i++){
+    var r = rows[i].getBoundingClientRect();
+    if(y < r.top + r.height/2) return i;       // drop BEFORE rows[i]
+  }
+  return rows.length;                           // drop after the last one
+}
+function ganttDragUpdate(){
+  var d = ganttDrag; if(!d) return;
+  var idx = ganttDragInsertIndex(d.lastY);
+  d.insertIdx = idx;
+  var rows = d.rows;
+  var y = (idx < rows.length) ? rows[idx].getBoundingClientRect().top : rows[rows.length-1].getBoundingClientRect().bottom;
+  var wr = d.wrap.getBoundingClientRect();
+  d.line.style.top = (y - 1) + 'px';
+  d.line.style.left = wr.left + 'px';
+  d.line.style.width = wr.width + 'px';
+}
+function ganttDragCleanup(){
+  var d = ganttDrag; if(!d) return;
+  if(d.ghost.parentNode) d.ghost.parentNode.removeChild(d.ghost);
+  if(d.line.parentNode) d.line.parentNode.removeChild(d.line);
+  d.srcRow.classList.remove('is-dragging');
+  document.body.classList.remove('gantt-dragging');
+  clearInterval(d.scrollTimer);
+  document.removeEventListener('pointermove', ganttDragMove);
+  document.removeEventListener('pointerup', ganttDragEnd);
+  document.removeEventListener('pointercancel', ganttDragCancel);
+  document.removeEventListener('keydown', ganttDragKey);
+  ganttDrag = null;
+}
+function ganttDragMove(e){
+  if(!ganttDrag) return;
+  ganttDrag.lastY = e.clientY;
+  ganttDrag.ghost.style.left = (e.clientX + 14) + 'px';
+  ganttDrag.ghost.style.top = (e.clientY + 14) + 'px';
+  ganttDragUpdate();
+}
+function ganttDragEnd(e){
+  var d = ganttDrag; if(!d) return;
+  if(e && typeof e.clientY === 'number') d.lastY = e.clientY;
+  var idx = ganttDragInsertIndex(d.lastY);
+  var ids = d.rows.map(function(r){ return r.getAttribute('data-task-id'); });
+  var from = ids.indexOf(d.taskId);
+  var to = idx > from ? idx - 1 : idx;           // index after the dragged item is taken out
+  var pid = d.pid;
+  ganttDragCleanup();
+  if(from < 0 || to === from) return;            // dropped where it was → nothing to do
+  ids.splice(from, 1);
+  ids.splice(to, 0, d.taskId);
+  reorderNotStartedTasks(pid, ids);
+}
+function ganttDragCancel(){ ganttDragCleanup(); }
+function ganttDragKey(e){ if(e.key === 'Escape') ganttDragCleanup(); }
+
+document.addEventListener('pointerdown', function(e){
+  var grip = e.target && e.target.closest ? e.target.closest('.glr-grip') : null;
+  if(!grip || ganttDrag) return;
+  if(e.pointerType === 'mouse' && e.button !== 0) return;
+  var row = grip.closest('.gantt-label-row');
+  if(!row) return;
+  var pid = row.getAttribute('data-pid');
+  var rows = [].slice.call(document.querySelectorAll('.gantt-label-row[data-ns="1"][data-pid="' + pid + '"]'));
+  if(rows.length < 2) return;                    // nothing to swap with
+  e.preventDefault();
+  var ghost = document.createElement('div');
+  ghost.className = 'gantt-drag-ghost';
+  var titleEl = row.querySelector('.glr-title');
+  ghost.textContent = '\u270B ' + (titleEl ? titleEl.textContent : '');
+  ghost.style.left = (e.clientX + 14) + 'px';
+  ghost.style.top = (e.clientY + 14) + 'px';
+  var line = document.createElement('div');
+  line.className = 'gantt-drop-line';
+  document.body.appendChild(ghost);
+  document.body.appendChild(line);
+  row.classList.add('is-dragging');
+  document.body.classList.add('gantt-dragging');
+  ganttDrag = {
+    taskId: row.getAttribute('data-task-id'), pid: pid, rows: rows, srcRow: row,
+    wrap: row.closest('.gantt-wrap') || row, ghost: ghost, line: line, lastY: e.clientY, insertIdx: null, scrollTimer: null
+  };
+  // auto-scroll the page when dragging close to the top/bottom edge (long task lists)
+  ganttDrag.scrollTimer = setInterval(function(){
+    if(!ganttDrag) return;
+    var y = ganttDrag.lastY, h = window.innerHeight || 800;
+    if(typeof window.scrollBy !== 'function') return;
+    if(y < 70) { window.scrollBy(0, -14); ganttDragUpdate(); }
+    else if(y > h - 70) { window.scrollBy(0, 14); ganttDragUpdate(); }
+  }, 16);
+  document.addEventListener('pointermove', ganttDragMove);
+  document.addEventListener('pointerup', ganttDragEnd);
+  document.addEventListener('pointercancel', ganttDragCancel);
+  document.addEventListener('keydown', ganttDragKey);
+  ganttDragUpdate();
+}, false);
 
 /* ===================== Event delegation ===================== */
 var todoSearchDebounce = null;
