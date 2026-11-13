@@ -2172,6 +2172,13 @@ function taskModalHtml(projectId, editId, copyFromId){
       '<button type="button" class="btn btn-ghost btn-sm assignee-remove-btn" data-action="remove-assignee-row" title="ลบแถวนี้">&times;</button>' +
     '</div>';
   }).join('');
+  // "Start after previous task" picker: other tasks in this project, latest due date first
+  var chainCands = tasks.filter(function(x){ return x.projectId === projectId && x.dueDate && (!t || x.id !== t.id); })
+    .sort(function(a,b){ return b.dueDate.localeCompare(a.dueDate); });
+  var chainHtml = chainCands.length ? '<div class="field"><label>&#9193; เริ่มต่อจากงานก่อนหน้า <span style="color:var(--ink-faint); font-weight:400;">(ไม่บังคับ — เลือกแล้ววันเริ่มจะเป็นวันถัดจากวันกำหนดส่งของงานนั้น)</span></label>' +
+    '<select id="f-task-chain" data-action="chain-prev-task"><option value="">— ไม่ใช้ / กรอกวันที่เอง —</option>' +
+    chainCands.map(function(x){ return '<option value="' + x.id + '">' + esc(truncate(x.title, 60)) + ' (ส่ง ' + fmtDateThai(x.dueDate) + ')</option>'; }).join('') +
+    '</select><div id="f-task-chain-hint" style="font-size:12px; color:var(--teal); margin-top:4px;"></div></div>' : '';
   return '' +
   '<div class="modal-head"><h3>' + (t ? 'แก้ไขงาน' : (src ? 'คัดลอกงาน' : 'เพิ่มงานใหม่')) + '</h3><button class="modal-close" data-action="close-modal">&times;</button></div>' +
   '<div class="modal-body">' +
@@ -2184,6 +2191,7 @@ function taskModalHtml(projectId, editId, copyFromId){
       '<div class="field"><label>วันเริ่มต้น *</label><input type="date" id="f-task-start" value="' + (pre?(pre.startDate||''):'') + '"></div>' +
       '<div class="field"><label>วันกำหนดส่ง *</label><input type="date" id="f-task-due" value="' + (pre?(pre.dueDate||''):'') + '"></div>' +
     '</div>' +
+    chainHtml +
     '<div class="field"><label>ความคืบหน้า</label><select id="f-task-progress">' +
       [0,25,50,75,100].map(function(v){
         var labelMap = {0:'0% — ยังไม่ได้ดำเนินการ',25:'25% — กำลังดำเนินการ',50:'50% — กำลังดำเนินการ',75:'75% — กำลังดำเนินการ',100:'100% — ดำเนินการเรียบร้อย'};
@@ -2300,6 +2308,29 @@ function handleSaveProject(editId){
   pushProject(proj);
   closeModal();
   render();
+}
+
+// Fill the task form so it starts the day after the chosen task's due date, keeping the current duration.
+// Form-only helper: nothing extra is stored in Firebase.
+function applyChainStart(prevId){
+  var hint = document.getElementById('f-task-chain-hint');
+  var startEl = document.getElementById('f-task-start');
+  var dueEl = document.getElementById('f-task-due');
+  if(hint) hint.textContent = '';
+  var prev = prevId ? taskById(prevId) : null;
+  if(!prev || !prev.dueDate || !startEl || !dueEl) return;
+  var dur = (startEl.value && dueEl.value && dueEl.value >= startEl.value) ? dayDiff(parseDateStr(startEl.value), parseDateStr(dueEl.value)) : null;
+  var newStart = addDays(parseDateStr(prev.dueDate), 1);
+  startEl.value = toDateStr(newStart);
+  if(dur !== null){
+    dueEl.value = toDateStr(addDays(newStart, dur));
+  } else if(dueEl.value && dueEl.value < startEl.value){
+    dueEl.value = '';
+  }
+  if(hint){
+    hint.textContent = '✓ เริ่ม ' + fmtDateThai(startEl.value) + ' (ถัดจากวันส่งของ "' + truncate(prev.title, 40) + '")' +
+      (dur !== null ? ' · คงระยะเวลาเดิม ' + (dur + 1) + ' วัน → ส่ง ' + fmtDateThai(dueEl.value) : (dueEl.value ? '' : ' · กรุณาใส่วันกำหนดส่ง'));
+  }
 }
 
 function handleSaveTask(projectId, editId, copyFromId){
@@ -3101,6 +3132,10 @@ document.addEventListener('change', function(e){
   if(action === 'filter-project-priority'){
     projectFilterPriority = e.target.value;
     render();
+    return;
+  }
+  if(action === 'chain-prev-task'){
+    applyChainStart(e.target.value);
     return;
   }
   if(action === 'todo-status-select'){
