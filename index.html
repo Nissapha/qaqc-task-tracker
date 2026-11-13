@@ -378,7 +378,7 @@ table.tk tr.todo-notes-panel td{padding:0; background:transparent;}
 .ggr-days{flex:0 0 44px; text-align:right; font-family:'IBM Plex Mono'; font-size:11px; font-weight:700; white-space:nowrap;}
 .ggr-days small{font-size:9px; font-weight:500; opacity:.7; margin-left:2px;}
 .glr-grip-spacer{flex:0 0 24px;}
-.glr-grip{flex:0 0 24px; height:24px; display:flex; align-items:center; justify-content:center; font-size:15px; line-height:1; border-radius:6px; cursor:grab; opacity:.6; touch-action:none; user-select:none; -webkit-user-select:none;}
+.glr-grip{flex:0 0 24px; height:24px; display:flex; align-items:center; justify-content:center; font-size:17px; font-weight:700; color:var(--navy); line-height:1; border-radius:6px; cursor:grab; opacity:.6; touch-action:none; user-select:none; -webkit-user-select:none;}
 .glr-grip:hover{background:var(--slate-soft); opacity:1;}
 .gantt-label-row.is-dragging{opacity:.4; background:var(--navy-soft);}
 body.gantt-dragging, body.gantt-dragging *{cursor:grabbing !important; user-select:none !important; -webkit-user-select:none !important;}
@@ -1526,7 +1526,7 @@ function renderGanttSection(mode){
       '<div class="glr-main"><div class="glr-title">' + esc(t.title) + '</div><div class="glr-sub">' + esc(taskAssigneeNamesShort(t)) + '</div></div>' +
       '<div class="glr-days">' + (rowDur ? rowDur + '<small>วัน</small>' : '–') + '</div>' +
       (rowDraggable
-        ? '<div class="glr-grip" title="กดค้างแล้วลากเพื่อสลับลำดับงาน (วันเริ่ม/วันส่งจะสลับตามตำแหน่ง)">&#9995;</div>'
+        ? '<div class="glr-grip" title="กดค้างแล้วลากเพื่อสลับลำดับงาน (วันเริ่ม/วันส่งจะสลับตามตำแหน่ง)">&#8645;</div>'
         : '<div class="glr-grip-spacer"></div>') +
     '</div>';
 
@@ -2606,7 +2606,7 @@ function exportProjectGantt(pid){
     // 2) Hide the "today" vertical line(s) + label(s) — rendered in both tick-row and body-rows
     var todayEls = wrap.querySelectorAll('.gantt-today-line, .gantt-today-label');
     for(var ti=0; ti<todayEls.length; ti++){ setStyle(todayEls[ti], 'display', 'none'); }
-    // 2b) Hide the ✋ drag handles (keep their space so the columns don't shift)
+    // 2b) Hide the ⇅ drag handles (keep their space so the columns don't shift)
     var gripEls = wrap.querySelectorAll('.glr-grip');
     for(var gi=0; gi<gripEls.length; gi++){ setStyle(gripEls[gi], 'visibility', 'hidden'); }
 
@@ -2722,7 +2722,7 @@ function roundRect(ctx, x, y, w, h, r){
 }
 
 /* ===================== Drag to re-order NOT-STARTED tasks (Gantt) =====================
-   Press-and-hold the ✋ handle, drag the row to a new position inside the same project, release.
+   Press-and-hold the ⇅ handle, drag the row to a new position inside the same project, release.
    Dates follow positions: the project's not-started tasks keep the same set of (start, due) "slots",
    but each slot is handed to whichever task now sits at that position. Pointer events → works with mouse and touch. */
 var ganttDrag = null;
@@ -2817,7 +2817,7 @@ document.addEventListener('pointerdown', function(e){
   var ghost = document.createElement('div');
   ghost.className = 'gantt-drag-ghost';
   var titleEl = row.querySelector('.glr-title');
-  ghost.textContent = '\u270B ' + (titleEl ? titleEl.textContent : '');
+  ghost.textContent = '\u21C5 ' + (titleEl ? titleEl.textContent : '');
   ghost.style.left = (e.clientX + 14) + 'px';
   ghost.style.top = (e.clientY + 14) + 'px';
   var line = document.createElement('div');
@@ -2908,10 +2908,7 @@ function barDragEnd(e){
   setTimeout(function(){ barDragSuppressClick = false; }, 0);
   var t = d.task;
   if(delta !== 0 && taskById(t.id)){
-    var oldS = t.startDate, oldE = t.dueDate;
-    t.startDate = nd.s; t.dueDate = nd.e; t.updatedAt = Date.now();
-    addActivity(t, 'schedule', 'ปรับกำหนดการจาก Gantt — ' + fmtDateThai(oldS) + ' – ' + fmtDateThai(oldE) +
-      ' → ' + fmtDateThai(nd.s) + ' – ' + fmtDateThai(nd.e) + ' (' + durationDaysOf(nd.s, nd.e) + ' วัน)');
+    t.startDate = nd.s; t.dueDate = nd.e; t.updatedAt = Date.now();   // no Activity Log entry for Gantt drags (by request)
     pushTask(t);
   }
   render();
