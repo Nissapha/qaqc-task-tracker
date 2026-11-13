@@ -2738,9 +2738,7 @@ function reorderNotStartedTasks(projectId, newOrderIds){
     var slot = slots[i], oldS = t.startDate, oldE = t.dueDate;
     var datesChanged = (oldS !== slot.s || oldE !== slot.e);
     if(datesChanged){
-      t.startDate = slot.s; t.dueDate = slot.e; t.updatedAt = Date.now();
-      addActivity(t, 'schedule', 'สลับลำดับงาน — ปรับกำหนดการ ' +
-        fmtDateThai(oldS) + ' – ' + fmtDateThai(oldE) + ' → ' + fmtDateThai(slot.s) + ' – ' + fmtDateThai(slot.e));
+      t.startDate = slot.s; t.dueDate = slot.e; t.updatedAt = Date.now();   // no Activity Log entry for re-ordering (by request)
     }
     var orderChanged = (t.order !== i);
     t.order = i;   // tie-breaker for tasks that share the same start date
