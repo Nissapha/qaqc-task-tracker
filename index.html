@@ -203,7 +203,7 @@ table.tk-todo td{white-space:nowrap; vertical-align:middle;}
 .modal-head h3{margin:0; font-size:16px; color:var(--navy); font-weight:700;}
 .modal-close{background:none; border:none; cursor:pointer; font-size:18px; color:var(--ink-faint); padding:2px 6px;}
 .modal-body{padding:20px 22px;}
-.modal-foot{padding:14px 22px 20px 22px; display:flex; justify-content:flex-end; gap:8px;}
+.modal-foot{padding:14px 22px 20px 22px; display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap;}
 
 .field{margin-bottom:14px;}
 .field label{display:block; font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:6px;}
@@ -1836,37 +1836,42 @@ function renderTodosView(){
   return head + filterBoxes + statusChips + searchBar + activeTable + doneSection;
 }
 
-function todoModalHtml(editId){
+function todoModalHtml(editId, copyFromId){
   var t = editId ? todoById(editId) : null;
-  var selectedUrgency = t && t.urgency ? t.urgency : 'medium';
-  var selectedImportance = t && t.importance ? t.importance : 'medium';
-  var selectedStatus = t && t.status ? t.status : 'not_started';
+  // Copy mode: prefill from source to-do but save as a brand-new item (status reset)
+  var src = (!t && copyFromId) ? todoById(copyFromId) : null;
+  var pre = t || (src ? { description: src.description + ' (สำเนา)', assignees: todoAssigneesArr(src), dueDate: src.dueDate, urgency: src.urgency, importance: src.importance, status: 'not_started' } : null);
+  var selectedUrgency = pre && pre.urgency ? pre.urgency : 'medium';
+  var selectedImportance = pre && pre.importance ? pre.importance : 'medium';
+  var selectedStatus = pre && pre.status ? pre.status : 'not_started';
 
   return '' +
-  '<div class="modal-head"><h3>' + (t ? 'แก้ไขงาน' : 'เพิ่มงานใหม่ (To-Do)') + '</h3><button class="modal-close" data-action="close-modal">&times;</button></div>' +
+  '<div class="modal-head"><h3>' + (t ? 'แก้ไขงาน' : (src ? 'คัดลอกงาน (To-Do)' : 'เพิ่มงานใหม่ (To-Do)')) + '</h3><button class="modal-close" data-action="close-modal">&times;</button></div>' +
   '<div class="modal-body">' +
-    '<div class="field"><label>รายละเอียดงาน *</label><textarea id="f-todo-desc" placeholder="รายละเอียดงานที่ต้องทำ...">' + (t?esc(t.description):'') + '</textarea></div>' +
+    '<div class="field"><label>รายละเอียดงาน *</label><textarea id="f-todo-desc" placeholder="รายละเอียดงานที่ต้องทำ...">' + (pre?esc(pre.description):'') + '</textarea></div>' +
     '<div class="field-row">' +
       '<div class="field"><label>ผู้รับผิดชอบ * <span style="color:var(--ink-faint); font-weight:400;">(เพิ่มได้หลายคน)</span></label>' +
       '<div id="f-todo-assignee-rows">' +
-        todoAssigneesArr(t).map(function(a){
+        todoAssigneesArr(pre).map(function(a){
           return '<div class="assignee-row" data-assignee-row><input type="text" class="f-todo-aname" value="' + esc(a) + '" placeholder="ชื่อผู้รับผิดชอบ"><button type="button" class="btn btn-ghost btn-sm assignee-remove-btn" data-action="remove-todo-assignee-row" title="ลบ">&times;</button></div>';
         }).join('') +
-        (todoAssigneesArr(t).length === 0 ? '<div class="assignee-row" data-assignee-row><input type="text" class="f-todo-aname" placeholder="ชื่อผู้รับผิดชอบ"><button type="button" class="btn btn-ghost btn-sm assignee-remove-btn" data-action="remove-todo-assignee-row" title="ลบ">&times;</button></div>' : '') +
+        (todoAssigneesArr(pre).length === 0 ? '<div class="assignee-row" data-assignee-row><input type="text" class="f-todo-aname" placeholder="ชื่อผู้รับผิดชอบ"><button type="button" class="btn btn-ghost btn-sm assignee-remove-btn" data-action="remove-todo-assignee-row" title="ลบ">&times;</button></div>' : '') +
       '</div>' +
       '<button type="button" class="btn btn-ghost btn-sm" data-action="add-todo-assignee-row" style="margin-top:6px;">+ เพิ่มผู้รับผิดชอบ</button>' +
     '</div>' +
-      '<div class="field"><label>Due Date *</label><input type="date" id="f-todo-due" value="' + (t?t.dueDate:'') + '"></div>' +
+      '<div class="field"><label>Due Date *</label><input type="date" id="f-todo-due" value="' + (pre?(pre.dueDate||''):'') + '"></div>' +
     '</div>' +
     '<div class="field"><label>ความเร่งด่วน (Urgency)</label>' + buildOptionGrid('f-todo-urgency-grid', PRIORITY_LEVELS, selectedUrgency, '&#9889;') + '</div>' +
     '<div class="field"><label>ความสำคัญ (Importance)</label>' + buildOptionGrid('f-todo-importance-grid', PRIORITY_LEVELS, selectedImportance, '&#11088;') + '</div>' +
     '<div class="field"><label>สถานะ</label>' + buildOptionGrid('f-todo-status-grid', TODO_STATUSES, selectedStatus, '') + '</div>' +
+    (src ? '<div style="font-size:12px; color:var(--ink-faint); margin-top:4px;">&#128203; คัดลอกจากงานเดิม — สถานะเริ่มที่ &quot;ยังไม่เริ่ม&quot; และไม่คัดลอกบันทึก ปรับ Due Date ได้ก่อนกดบันทึก</div>' : '') +
     '<div class="field-error" id="f-todo-error"></div>' +
   '</div>' +
   '<div class="modal-foot">' +
     (t ? '<button class="btn btn-danger" data-action="delete-todo" data-id="' + t.id + '">ลบ</button>' : '') +
+    (t ? '<button class="btn btn-ghost" data-action="copy-todo" data-id="' + t.id + '">&#128203; คัดลอก</button>' : '') +
     '<button class="btn btn-ghost" data-action="close-modal">ยกเลิก</button>' +
-    '<button class="btn btn-primary" data-action="save-todo" data-id="' + (t?t.id:'') + '">' + (t?'บันทึกการแก้ไข':'+ เพิ่มงาน') + '</button>' +
+    '<button class="btn btn-primary" data-action="save-todo" data-id="' + (t?t.id:'') + '" data-copy-from="' + (src?src.id:'') + '">' + (t?'บันทึกการแก้ไข':(src?'+ สร้างสำเนา':'+ เพิ่มงาน')) + '</button>' +
   '</div>';
 }
 
@@ -2153,9 +2158,12 @@ function projectModalHtml(editId){
   '<button class="btn btn-primary" data-action="save-project" data-id="' + (p?p.id:'') + '">' + (p?'บันทึกการแก้ไข':'+ สร้างโปรเจกต์') + '</button></div>';
 }
 
-function taskModalHtml(projectId, editId){
+function taskModalHtml(projectId, editId, copyFromId){
   var t = editId ? taskById(editId) : null;
-  var assigneeList = t ? taskAssigneesArr(t) : [{name:'', dept:''}];
+  // Copy mode: prefill from source task but save as a brand-new task
+  var src = (!t && copyFromId) ? taskById(copyFromId) : null;
+  var pre = t || (src ? { title: src.title + ' (สำเนา)', startDate: src.startDate, dueDate: src.dueDate, progress: 0, assignees: taskAssigneesArr(src) } : null);
+  var assigneeList = pre ? taskAssigneesArr(pre) : [{name:'', dept:''}];
   if(!assigneeList.length) assigneeList = [{name:'', dept:''}];
   var assigneeRowsHtml = assigneeList.map(function(a, idx){
     return '<div class="assignee-row" data-assignee-row>' +
@@ -2165,28 +2173,29 @@ function taskModalHtml(projectId, editId){
     '</div>';
   }).join('');
   return '' +
-  '<div class="modal-head"><h3>' + (t ? 'แก้ไขงาน' : 'เพิ่มงานใหม่') + '</h3><button class="modal-close" data-action="close-modal">&times;</button></div>' +
+  '<div class="modal-head"><h3>' + (t ? 'แก้ไขงาน' : (src ? 'คัดลอกงาน' : 'เพิ่มงานใหม่')) + '</h3><button class="modal-close" data-action="close-modal">&times;</button></div>' +
   '<div class="modal-body">' +
-    '<div class="field"><label>ชื่องาน *</label><input type="text" id="f-task-title" value="' + (t?esc(t.title):'') + '" placeholder="เช่น ตรวจสอบ Incoming Material รุ่น ON2-08VP"></div>' +
+    '<div class="field"><label>ชื่องาน *</label><input type="text" id="f-task-title" value="' + (pre?esc(pre.title):'') + '" placeholder="เช่น ตรวจสอบ Incoming Material รุ่น ON2-08VP"></div>' +
     '<div class="field"><label>ผู้รับผิดชอบ * <span style="color:var(--ink-faint); font-weight:400;">(เพิ่มได้หลายคน แต่ละคนระบุฝ่ายแยกกันได้)</span></label>' +
       '<div id="f-task-assignee-rows">' + assigneeRowsHtml + '</div>' +
       '<button type="button" class="btn btn-ghost btn-sm" data-action="add-assignee-row" style="margin-top:6px;">+ เพิ่มผู้รับผิดชอบ</button>' +
     '</div>' +
     '<div class="field-row">' +
-      '<div class="field"><label>วันเริ่มต้น *</label><input type="date" id="f-task-start" value="' + (t?t.startDate:'') + '"></div>' +
-      '<div class="field"><label>วันกำหนดส่ง *</label><input type="date" id="f-task-due" value="' + (t?t.dueDate:'') + '"></div>' +
+      '<div class="field"><label>วันเริ่มต้น *</label><input type="date" id="f-task-start" value="' + (pre?(pre.startDate||''):'') + '"></div>' +
+      '<div class="field"><label>วันกำหนดส่ง *</label><input type="date" id="f-task-due" value="' + (pre?(pre.dueDate||''):'') + '"></div>' +
     '</div>' +
     '<div class="field"><label>ความคืบหน้า</label><select id="f-task-progress">' +
       [0,25,50,75,100].map(function(v){
         var labelMap = {0:'0% — ยังไม่ได้ดำเนินการ',25:'25% — กำลังดำเนินการ',50:'50% — กำลังดำเนินการ',75:'75% — กำลังดำเนินการ',100:'100% — ดำเนินการเรียบร้อย'};
-        var sel = (t ? Number(t.progress) : 0) === v ? ' selected' : '';
+        var sel = (pre ? Number(pre.progress) : 0) === v ? ' selected' : '';
         return '<option value="' + v + '"' + sel + '>' + labelMap[v] + '</option>';
       }).join('') +
     '</select></div>' +
+    (src ? '<div style="font-size:12px; color:var(--ink-faint); margin-top:4px;">&#128203; คัดลอกจาก &quot;' + esc(src.title) + '&quot; — ความคืบหน้าเริ่มที่ 0% และไม่คัดลอกประวัติการติดตาม ปรับวันที่ได้ก่อนกดบันทึก</div>' : '') +
     '<div class="field-error" id="f-task-error"></div>' +
   '</div>' +
   '<div class="modal-foot"><button class="btn btn-ghost" data-action="close-modal">ยกเลิก</button>' +
-  '<button class="btn btn-primary" data-action="save-task" data-pid="' + projectId + '" data-id="' + (t?t.id:'') + '">' + (t?'บันทึกการแก้ไข':'เพิ่มงาน') + '</button></div>';
+  '<button class="btn btn-primary" data-action="save-task" data-pid="' + projectId + '" data-id="' + (t?t.id:'') + '" data-copy-from="' + (src?src.id:'') + '">' + (t?'บันทึกการแก้ไข':(src?'+ สร้างสำเนา':'เพิ่มงาน')) + '</button></div>';
 }
 
 function personUnfinishedModalHtml(personName){
@@ -2257,6 +2266,7 @@ function taskDetailModalHtml(taskId){
   '</div>' +
   '<div class="modal-foot">' +
     '<button class="btn btn-danger" data-action="delete-task" data-id="' + t.id + '">ลบงานนี้</button>' +
+    '<button class="btn btn-ghost" data-action="copy-task" data-id="' + t.id + '">&#128203; คัดลอก</button>' +
     '<button class="btn btn-ghost" data-action="open-edit-task" data-id="' + t.id + '">แก้ไขรายละเอียด</button>' +
     '<button class="btn btn-ghost" data-action="close-modal">ปิด</button>' +
   '</div>';
@@ -2292,7 +2302,7 @@ function handleSaveProject(editId){
   render();
 }
 
-function handleSaveTask(projectId, editId){
+function handleSaveTask(projectId, editId, copyFromId){
   var title = document.getElementById('f-task-title').value.trim();
   var rowEls = document.querySelectorAll('#f-task-assignee-rows [data-assignee-row]');
   var assignees = [];
@@ -2332,7 +2342,8 @@ function handleSaveTask(projectId, editId){
     }
   } else {
     task = { id: uid('task'), projectId: projectId, title: title, assignees: assignees, startDate: start, dueDate: due, progress: Number(progress), notes: [], createdAt: Date.now() };
-    addActivity(task, 'created', 'สร้างงาน (ความคืบหน้าเริ่มต้น ' + Number(progress) + '%)');
+    var copySrcTask = copyFromId ? taskById(copyFromId) : null;
+    addActivity(task, 'created', 'สร้างงาน' + (copySrcTask ? ' โดยคัดลอกจาก "' + copySrcTask.title + '"' : '') + ' (ความคืบหน้าเริ่มต้น ' + Number(progress) + '%)');
     tasks.push(task);
   }
   pushTask(task);
@@ -2387,7 +2398,7 @@ function handleDeleteTask(taskId){
   render();
 }
 
-function handleSaveTodo(editId){
+function handleSaveTodo(editId, copyFromId){
   var description = document.getElementById('f-todo-desc').value.trim();
   // collect multi-assignee rows
   var aRows = document.querySelectorAll('#f-todo-assignee-rows [data-assignee-row]');
@@ -2422,7 +2433,8 @@ function handleSaveTodo(editId){
     }
   } else {
     todo = { id: uid('todo'), description: description, assignees: assignees, dueDate: dueDate, urgency: urgency, importance: importance, status: status, notes: [], createdAt: Date.now() };
-    addActivity(todo, 'created', 'สร้างงาน');
+    var copySrcTodo = copyFromId ? todoById(copyFromId) : null;
+    addActivity(todo, 'created', copySrcTodo ? 'สร้างงานโดยคัดลอกจากงานเดิม' : 'สร้างงาน');
     todos.push(todo);
   }
   pushTodo(todo);
@@ -2948,7 +2960,11 @@ document.addEventListener('click', function(e){
       }
       break;
     case 'save-task':
-      handleSaveTask(el.getAttribute('data-pid'), id || null);
+      handleSaveTask(el.getAttribute('data-pid'), id || null, el.getAttribute('data-copy-from') || null);
+      break;
+    case 'copy-task':
+      var ctk = taskById(id);
+      if(ctk) openModal(taskModalHtml(ctk.projectId, null, id));
       break;
     case 'delete-task':
       handleDeleteTask(id);
@@ -2963,7 +2979,10 @@ document.addEventListener('click', function(e){
       openModal(todoModalHtml(id || null));
       break;
     case 'save-todo':
-      handleSaveTodo(id || null);
+      handleSaveTodo(id || null, el.getAttribute('data-copy-from') || null);
+      break;
+    case 'copy-todo':
+      if(todoById(id)) openModal(todoModalHtml(null, id));
       break;
     case 'delete-todo':
       handleDeleteTodo(id);
